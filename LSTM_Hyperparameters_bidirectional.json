@@ -1,0 +1,15 @@
+{
+    "embedding_dim": 128,
+    "hidden_dim": 128,
+    "output_dim": 1,
+    "num_layers": 2,
+    "dropout_rate": 0.2,
+    "learning_rate": 0.01,
+    "epochs": 150,
+    "patience": 5,
+    "train": 0.88,
+    "test": 0.02,
+    "val": 0.10,
+    "loss_weight": 100,
+    "batch_size": 400
+}

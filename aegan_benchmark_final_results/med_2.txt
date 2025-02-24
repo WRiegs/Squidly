@@ -1,0 +1,49 @@
+>1
+Accuracy: 0.9994
+Precision: 0.8398
+Recall: 0.8233
+F1: 0.8315
+best_threshold: 0.97
+val_threshold(used): 0.98
+AUC_ROC: 0.9970
+AUC_PR: -0.8562
+
+>2
+Accuracy: 0.9994
+Precision: 0.8614
+Recall: 0.7778
+F1: 0.8175
+best_threshold: 0.98
+val_threshold(used): 0.99
+AUC_ROC: 0.9979
+AUC_PR: -0.8622
+
+>3
+Accuracy: 0.9994
+Precision: 0.8415
+Recall: 0.8109
+F1: 0.8259
+best_threshold: 0.98
+val_threshold(used): 0.99
+AUC_ROC: 0.9981
+AUC_PR: -0.8561
+
+>4
+Accuracy: 0.9994
+Precision: 0.8153
+Recall: 0.8257
+F1: 0.8205
+best_threshold: 0.99
+val_threshold(used): 0.99
+AUC_ROC: 0.9773
+AUC_PR: -0.8185
+
+>5
+Accuracy: 0.9994
+Precision: 0.8593
+Recall: 0.7760
+F1: 0.8155
+best_threshold: 0.92
+val_threshold(used): 0.99
+AUC_ROC: 0.9891
+AUC_PR: -0.8401
