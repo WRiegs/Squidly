@@ -1,5 +1,5 @@
 # 🦑Squidly
-![Overview Figure](overview_fig.png)
+![Overview Figure](overview_fig_.png)
 
 Squidly, is a tool that employs a biologically informed contrastive learning approach to accurately predict catalytic residues from enzyme sequences. We offer Squidly as ensembled with Blast to achieve high accuracy at low and high sequence homology settings.
 
@@ -46,7 +46,7 @@ We developed reproduction scripts for each benchmark training/test scenario.
 The corresponding scripts can be found in the reproduction_run directory.
 
 You must choose the pair scheme for the Squidly models:
-![Pair Scheme Figure](pairscheme_fig.png)
+![Pair Scheme Figure](pairscheme_fig_.png)
 
 Scheme 2 and 3 had the sample limit parameter set to 16000, and scheme 1 at 4000000.
 
