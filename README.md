@@ -46,7 +46,7 @@ We developed reproduction scripts for each benchmark training/test scenario.
 The corresponding scripts can be found in the reproduction_run directory.
 
 You must choose the pair scheme for the Squidly models:
-![Pair Scheme Figure](pairscheme_fig_.png)
+![Pair Scheme Figure](pair_scheme_fig_.png)
 
 Scheme 2 and 3 had the sample limit parameter set to 16000, and scheme 1 at 4000000.
 
