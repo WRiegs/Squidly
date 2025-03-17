@@ -19,13 +19,14 @@ Table with requirements:
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/Squidly.git
-cd repo-name
+cd Squidly
 
 # Install dependencies
 pip install -r requirements.txt 
 ```
 
 Torch with cuda 11.8+ must be installed.
+https://pytorch.org/get-started/locally/
 
 ## Usage
 
