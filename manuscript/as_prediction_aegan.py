@@ -23,10 +23,10 @@ files = ['PC', 'NN', 'EF_superfamily', 'EF_fold', 'EF_family', 'HA_superfamily']
 # parse sequence fasta file
 with open('aegan_time_log.txt', 'a+') as fout:
     #fout.write('method,time(s),dataset,size,model\n')
-    model = 'esm2_t48_15B_UR50D' #'esm2_t36_3B_UR50D' #
+    model = 'esm2_t36_3B_UR50D' #
     for f in files:
         df = pd.read_csv(f'{data_dir}{f}/{f}.tsv', sep='\t')
         start_time = time.time()
-        df << (ActiveSitePred(id_col, seq_col, squidly_dir, num_threads, esm2_model=model) >> Save(f'squidly/squidly_as_pred_15B_{f}.pkl'))
+        df << (ActiveSitePred(id_col, seq_col, squidly_dir, num_threads, esm2_model=model) >> Save(f'squidly/squidly_as_pred_3B_{f}.pkl'))
         fout.write(f'squidly,{time.time() - start_time},{f},{len(df)},{model}\n')
         print("--- %s seconds ---" % (time.time() - start_time))

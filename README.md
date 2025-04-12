@@ -19,20 +19,54 @@ Table with requirements:
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/Squidly.git
-cd Squidly
-
 # Install dependencies
-pip install -r requirements.txt 
+./install.sh # Makes the squidly conda env
+
+# Build and install
+python setup.py sdist bdist_wheel
+pip install dist/squidly-0.0.1.tar.gz 
 ```
 
 Torch with cuda 11.8+ must be installed.
 https://pytorch.org/get-started/locally/
 
 ## Usage
+For example to run the 3B model with a fasta file:
+```bash
+squidly AEGAN_with_active_site_seqs_NN.fasta esm2_t36_3B_UR50D
+```
 
+Note you can also save to other directories and also save the name see help for details.
 
-### Parameters
+```bash
+                                                                                   
+ Usage: squidly [OPTIONS] FASTA_FILE ESM2_MODEL [OUTPUT_FOLDER] [RUN_NAME] [BLAST_CUTOFF]                                                                        
+                                                                                                                                                    
+ Find cataltic residues using Squidly and BLAST                                                                                                                          
+                                                                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ *    fasta_file         TEXT             Full path to query fasta or csv (note have simple IDs otherwise we'll remove all funky characters.)     │
+│                                          [default: None]                                                                                         │
+│                                          [required]                                                                                              │
+│ *    esm2_model         TEXT             Name of the esm2_model, esm2_t36_3B_UR50D or esm2_t48_15B_UR50D [default: None] [required]              │
+│      output_folder      [OUTPUT_FOLDER]  Where to store results (full path!) [default: Current Directory]                                        │
+│      run_name           [RUN_NAME]       Name of the run [default: squidly]                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --cr-model-as               TEXT     Optional: Model for the catalytic residue prediction i.e. not using the default with the package. Ensure it │
+│                                      matches the esmmodel.                                                                                       │
+│ --lstm-model-as             TEXT     Optional: LSTM model path for the catalytic residue prediction i.e. not using the default with the package. │
+│                                      Ensure it matches the esmmodel.                                                                             │
+│ --toks-per-batch            INTEGER  Run method (filter or complete) i.e. filter = only annotates with the next tool those that couldn't be      │
+│                                      found.                                                                                                      │
+│                                      [default: 5]                                                                                                │
+│ --as-threshold              FLOAT    Whether or not to keep multiple predicted values if False only the top result is retained. [default: 0.99]  │
+│ --install-completion                 Install completion for the current shell.                                                                   │
+│ --show-completion                    Show completion for the current shell, to copy it or customize the installation.                            │
+│ --help                               Show this message and exit.                                                                                 │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
+```
 
 ## Data Availability
 All datasets used in the paper are available here:
@@ -47,7 +81,7 @@ We developed reproduction scripts for each benchmark training/test scenario.
 The corresponding scripts can be found in the reproduction_run directory.
 
 You must choose the pair scheme for the Squidly models:
-![Pair Scheme Figure](pair_scheme_fig_.png)
+![Pair Scheme Figure](pair_scheme_fig_.png | width=100)
 
 Scheme 2 and 3 had the sample limit parameter set to 16000, and scheme 1 at 4000000.
 
