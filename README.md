@@ -69,8 +69,7 @@ Note you can also save to other directories and also save the name see help for 
 ```
 
 ## Data Availability
-All datasets used in the paper are available here:
-Zenodo:
+All datasets used in the paper are available here (contact Will or Ariane :) for now)
 
 ## Reproducing Squidly
 We developed reproduction scripts for each benchmark training/test scenario.
@@ -81,7 +80,7 @@ We developed reproduction scripts for each benchmark training/test scenario.
 The corresponding scripts can be found in the reproduction_run directory.
 
 You must choose the pair scheme for the Squidly models:
-![Pair Scheme Figure](pair_scheme_fig_.png | width=100)
+<img src="pair_scheme_fig_.png" width=50%>
 
 Scheme 2 and 3 had the sample limit parameter set to 16000, and scheme 1 at 4000000.
 
