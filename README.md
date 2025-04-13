@@ -31,40 +31,65 @@ Torch with cuda 11.8+ must be installed.
 https://pytorch.org/get-started/locally/
 
 ## Usage
-For example to run the 3B model with a fasta file:
+For example to run the 3B model with a fasta file (in squidly only mode)
 ```bash
-squidly AEGAN_with_active_site_seqs_NN.fasta esm2_t36_3B_UR50D
+squidly example.fasta esm2_t36_3B_UR50D 
 ```
 
-Note you can also save to other directories and also save the name see help for details.
+Or to run as an ensemble with BLAST (you need to pass the database as well)
+```
+squidly example.fasta esm2_t36_3B_UR50D output_folder/ --database reviewed_sprot_08042025.csv
+```
+Where `reviewed_sprot_08042025.csv` is the example database (i.e. a csv file with the following columns)
+
+
+| Entry      | Sequence         | Residue                                  |
+|------------|------------------|------------------------------------------|
+| A0A009IHW8 | MSLEQKKGADIIS    | 207                                      |
+| A0A023I7E1 | MRFQVIVAAATITMIY | 499\|577\|581                            |
+| A0A024B7W1 | MKNPKKKSGGFRIV   | 1552\|1576\|1636\|2580\|2665\|2701\|2737 |
+| A0A024RXP8 | MYRKLAVISAFL     | 228\|233                                 |
+
 
 ```bash
-                                                                                   
- Usage: squidly [OPTIONS] FASTA_FILE ESM2_MODEL [OUTPUT_FOLDER] [RUN_NAME] [BLAST_CUTOFF]                                                                        
-                                                                                                                                                    
- Find cataltic residues using Squidly and BLAST                                                                                                                          
-                                                                                                                                                    
-╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ *    fasta_file         TEXT             Full path to query fasta or csv (note have simple IDs otherwise we'll remove all funky characters.)     │
-│                                          [default: None]                                                                                         │
-│                                          [required]                                                                                              │
-│ *    esm2_model         TEXT             Name of the esm2_model, esm2_t36_3B_UR50D or esm2_t48_15B_UR50D [default: None] [required]              │
-│      output_folder      [OUTPUT_FOLDER]  Where to store results (full path!) [default: Current Directory]                                        │
-│      run_name           [RUN_NAME]       Name of the run [default: squidly]                                                                      │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭─ Options ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --cr-model-as               TEXT     Optional: Model for the catalytic residue prediction i.e. not using the default with the package. Ensure it │
-│                                      matches the esmmodel.                                                                                       │
-│ --lstm-model-as             TEXT     Optional: LSTM model path for the catalytic residue prediction i.e. not using the default with the package. │
-│                                      Ensure it matches the esmmodel.                                                                             │
-│ --toks-per-batch            INTEGER  Run method (filter or complete) i.e. filter = only annotates with the next tool those that couldn't be      │
-│                                      found.                                                                                                      │
-│                                      [default: 5]                                                                                                │
-│ --as-threshold              FLOAT    Whether or not to keep multiple predicted values if False only the top result is retained. [default: 0.99]  │
-│ --install-completion                 Install completion for the current shell.                                                                   │
-│ --show-completion                    Show completion for the current shell, to copy it or customize the installation.                            │
-│ --help                               Show this message and exit.                                                                                 │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Usage: squidly [OPTIONS] FASTA_FILE ESM2_MODEL [OUTPUT_FOLDER] [RUN_NAME]                                         
+                                                                                                                   
+ Find catalytic residues using Squidly and BLAST.                                                                  
+                                                                                                                   
+╭─ Arguments ─────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ *    fasta_file         TEXT             Full path to query fasta (note have simple IDs otherwise we'll remove  │
+│                                          all funky characters.)                                                 │
+│                                          [default: None]                                                        │
+│                                          [required]                                                             │
+│ *    esm2_model         TEXT             Name of the esm2_model, esm2_t36_3B_UR50D or esm2_t48_15B_UR50D        │
+│                                          [default: None]                                                        │
+│                                          [required]                                                             │
+│      output_folder      [OUTPUT_FOLDER]  Where to store results (full path!) [default: Current Directory]       │
+│      run_name           [RUN_NAME]       Name of the run [default: squidly]                                     │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --database                  TEXT     Full path to database csv (if you want to do the ensemble), needs 3        │
+│                                      columns: 'Entry', 'Sequence', 'Residue' where residue is a | separated     │
+│                                      list of residues. See default DB provided by Squidly.                      │
+│                                      [default: None]                                                            │
+│ --cr-model-as               TEXT     Optional: Model for the catalytic residue prediction i.e. not using the    │
+│                                      default with the package. Ensure it matches the esmmodel.                  │
+│ --lstm-model-as             TEXT     Optional: LSTM model path for the catalytic residue prediction i.e. not    │
+│                                      using the default with the package. Ensure it matches the esmmodel.        │
+│ --toks-per-batch            INTEGER  Run method (filter or complete) i.e. filter = only annotates with the next │
+│                                      tool those that couldn't be found.                                         │
+│                                      [default: 5]                                                               │
+│ --as-threshold              FLOAT    Whether or not to keep multiple predicted values if False only the top     │
+│                                      result is retained.                                                        │
+│                                      [default: 0.99]                                                            │
+│ --blast-threshold           FLOAT    Sequence identity with which to use Squidly over BLAST defualt 0.3         │
+│                                      (meaning for seqs with < 0.3 identity in the DB use Squidly).              │
+│                                      [default: 0.3]                                                             │
+│ --install-completion                 Install completion for the current shell.                                  │
+│ --show-completion                    Show completion for the current shell, to copy it or customize the         │
+│                                      installation.                                                              │
+│ --help                               Show this message and exit.                                                │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 ```
 

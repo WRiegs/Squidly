@@ -6,7 +6,7 @@ from Bio import AlignIO
 import numpy as np
 import re
 from sciutil import SciUtil
-
+import pandas as pd
 
 u = SciUtil()
 
@@ -60,7 +60,7 @@ def run_blast(query_df, database_df, output_folder, run_name, id_col='id', seq_c
     # Convert databaset to a fasta file in the output folder
     database_fasta = os.path.join(output_folder, f'{run_name}_database.fasta')
     with open(database_fasta, 'w+') as fout:
-        for seq_id, seq in database_df[[id_col, seq_col]]:
+        for seq_id, seq in database_df[['Entry', 'Sequence']].values:
             done_records = []
             # Remove all the ids
             new_id = re.sub('[^0-9a-zA-Z]+', '', seq_id)
@@ -83,8 +83,10 @@ def run_blast(query_df, database_df, output_folder, run_name, id_col='id', seq_c
     
     # Make a dictionary from the fasta file
     uniprot_id_to_seq = dict(zip(database_df.Entry, database_df.Sequence))
-    for name, seq, uniprot in test_df[['From', 'Sequence', 'target']].values:
-        fin = f'msa/{uniprot}_{name}.fa'
+    output_folder = os.path.join(output_folder, "msa")
+    os.system(f'mkdir {output_folder}')
+    for name, seq, uniprot in test_df[['From', 'seq', 'target']].values:
+        fin = os.path.join(output_folder, f'{uniprot}_{name}.fa')
         with open(fin, 'w+') as fout:
             fout.write(f'>{uniprot}\n{uniprot_id_to_seq.get(uniprot)}\n')
             fout.write(f'>{name}\n{seq}')
@@ -92,6 +94,6 @@ def run_blast(query_df, database_df, output_folder, run_name, id_col='id', seq_c
         os.system(f'clustalo --force -i {fin} -o {fin.replace(".fa", ".msa")}')
         
     # Now we can align to the sequneces
-    return align_blast_to_seq(query_df, database_df, output_folder)        
+    return align_blast_to_seq(test_df, database_df, output_folder)        
       
                     

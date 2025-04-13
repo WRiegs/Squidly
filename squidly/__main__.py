@@ -33,7 +33,7 @@ import subprocess
 import timeit
 import logging
 from sciutil import SciUtil
-from blast import *
+from squidly.blast import *
 
 u = SciUtil()
 logger = logging.getLogger(__name__)
@@ -44,8 +44,8 @@ app = typer.Typer()
 
 def combine_squidly_blast(query_df, squidly_df, blast_df):
     # Take from squidly and BLAST
-    squidly_dict = dict(zip(squidly_df.id, squidly_df.Squidly_CR_Position))
-    blast_dict = dict(zip(blast_df.Entry, blast_df.Residues))
+    squidly_dict = dict(zip(squidly_df.label, squidly_df.Squidly_CR_Position))
+    blast_dict = dict(zip(blast_df.From, blast_df.Residues))
     rows = []
     for seq_id in query_df['id'].values:
         if blast_dict.get(seq_id):
@@ -88,6 +88,7 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
                 fout.write(f">{new_id}\n{record.seq}\n")
             else:
                 u.warn_p(['Had a duplicate record! Only keeping the first entry, duplicate ID:', record.id])
+                
     blast_df = pd.DataFrame([], columns=['Entry', 'Residues'])
     query_df = pd.DataFrame(query_rows, columns=['id', 'seq'])    
     if database != 'None': # 
@@ -103,10 +104,12 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
         blast_df = run_blast(query_df, database_df, output_folder, run_name, id_col='id', seq_col='seq')
         # Now filter to use squidly on those that weren't identified
         entries_found = []
-        for entry, seq_id, residue in blast_df[['From', 'sequence identity', 'BLAST_residues']].values:
-            if seq_id > blast_threshold and isinstance(str, residue) and len(residue) > 0:
+        for entry, seq_identity, residue in blast_df[['From', 'sequence identity', 'BLAST_residues']].values:
+            if seq_identity > blast_threshold and isinstance(residue, str) and len(residue) > 0:
                 entries_found.append(entry)
         # Now we can filter the query DF.
+        # Re-create
+        query_df = pd.DataFrame(query_rows, columns=['id', 'seq'])    
         remaining_df = query_df[~query_df['id'].isin(entries_found)]
         # Now resave as as fasta file
         with open(os.path.join(output_folder, f'{run_name}_input_fasta.fasta'), 'w+') as fout:
@@ -114,7 +117,7 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
             for seq_id, seq in remaining_df[['id', 'seq']].values:
                 fout.write(f">{seq_id}\n{seq}\n")
         # Now run squidly 
-        
+    
     # Other parsing
     if esm2_model not in ['esm2_t36_3B_UR50D', 'esm2_t48_15B_UR50D']:
         u.err_p(['ERROR: your ESM model must be one of', 'esm2_t36_3B_UR50D', 'esm2_t48_15B_UR50D']) 
@@ -132,14 +135,17 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
             
         cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), fasta_file, esm2_model, cr_model_as, lstm_model_as, output_folder, '--toks_per_batch', 
             str(toks_per_batch), '--AS_threshold',  str(as_threshold)]
-    u.warn_p(["Running command:", ''.join(cmd)])
+    u.warn_p(["Running command:", ' '.join(cmd)])
     subprocess.run(cmd, capture_output=True, text=True)       
     # Now combine the two and save all to the output folder
-    squidly_df = pd.read_pickle(os.path.join(output_folder, f'{run_name}_squidly.pkl'))
+    # get the input filename 
+    input_filename = fasta_file.split('/')[-1].split('.')[0]
+    squidly_df = pd.read_pickle(os.path.join(output_folder, f'{input_filename}_results.pkl'))
 
     ensemble = combine_squidly_blast(query_df, squidly_df, blast_df)
-    blast_df.to_csv(os.path.join(output_folder, f'{run_name}_squidly.pkl'))
+    blast_df.to_csv(os.path.join(output_folder, f'{run_name}_blast.csv'), index=False)
     squidly_df.to_pickle(os.path.join(output_folder, f'{run_name}_squidly.pkl'))
+    ensemble.to_csv(os.path.join(output_folder, f'{run_name}_ensemble.csv'), index=False)
 
     
 if __name__ == "__main__":
@@ -147,3 +153,4 @@ if __name__ == "__main__":
     
 # Example command
 # squidly AEGAN_with_active_site_seqs_NN.fasta esm2_t36_3B_UR50D
+#python __main__.py '../tests/AEGAN_with_active_site_seqs_NN.fasta' esm2_t36_3B_UR50D tmp/ --database ../data/reviewed_sprot_08042025.csv
