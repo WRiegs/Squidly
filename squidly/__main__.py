@@ -33,7 +33,8 @@ import subprocess
 import timeit
 import logging
 from sciutil import SciUtil
-from squidly.blast import *
+from squidly import *
+from tqdm import tqdm
 
 u = SciUtil()
 logger = logging.getLogger(__name__)
@@ -44,8 +45,14 @@ app = typer.Typer()
 
 def combine_squidly_blast(query_df, squidly_df, blast_df):
     # Take from squidly and BLAST
-    squidly_dict = dict(zip(squidly_df.label, squidly_df.Squidly_CR_Position))
-    blast_dict = dict(zip(blast_df.From, blast_df.BLAST_residues))
+    if len(squidly_df) > 0:
+        squidly_dict = dict(zip(squidly_df.label, squidly_df.Squidly_CR_Position))
+    else:
+        squidly_dict = {}
+    if len(blast_df) > 0:
+        blast_dict = dict(zip(blast_df.From, blast_df.BLAST_residues))
+    else:
+        blast_dict = {}
     rows = []
     for seq_id in query_df['id'].values:
         if blast_dict.get(seq_id):
@@ -66,8 +73,8 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
         lstm_model_as: Annotated[str, typer.Option(help="Optional: LSTM model path for the catalytic residue prediction i.e. not using the default with the package. Ensure it matches the esmmodel.")] = '', 
         toks_per_batch: Annotated[int, typer.Option(help="Run method (filter or complete) i.e. filter = only annotates with the next tool those that couldn't be found.")] = 5, 
         as_threshold: Annotated[float, typer.Option(help="Whether or not to keep multiple predicted values if False only the top result is retained.")] = 0.99,
-        blast_threshold: Annotated[float, typer.Option(help="Sequence identity with which to use Squidly over BLAST defualt 0.3 (meaning for seqs with < 0.3 identity in the DB use Squidly).")] = 0.3
-        ):
+        blast_threshold: Annotated[float, typer.Option(help="Sequence identity with which to use Squidly over BLAST defualt 0.3 (meaning for seqs with < 0.3 identity in the DB use Squidly).")] = 0.3,
+        chunk: Annotated[int, typer.Option(help="Max chunk size for the dataset.")] = 0):
 
     """ 
     Find catalytic residues using Squidly and BLAST.
@@ -90,7 +97,8 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
                 u.warn_p(['Had a duplicate record! Only keeping the first entry, duplicate ID:', record.id])
                 
     blast_df = pd.DataFrame([], columns=['Entry', 'Residues'])
-    query_df = pd.DataFrame(query_rows, columns=['id', 'seq'])    
+    query_df = pd.DataFrame(query_rows, columns=['id', 'seq'])  
+    squidly_df = pd.DataFrame()  
     if database != 'None': # 
         u.warn_p(["Running BLAST on the following DB: ", database])
         
@@ -117,7 +125,7 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
             for seq_id, seq in remaining_df[['id', 'seq']].values:
                 fout.write(f">{seq_id}\n{seq}\n")
         # Now run squidly 
-    
+        u.warn_p(["Running Squidly on the following number of seqs: ", len(remaining_df)])
     # Other parsing
     if esm2_model not in ['esm2_t36_3B_UR50D', 'esm2_t48_15B_UR50D']:
         u.err_p(['ERROR: your ESM model must be one of', 'esm2_t36_3B_UR50D', 'esm2_t48_15B_UR50D']) 
@@ -132,15 +140,48 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
         elif esm2_model == 'esm2_t48_15B_UR50D':
             lstm_model_as = os.path.join(model_folder, 'Squidly_LSTM_15B.pth')
             cr_model_as = os.path.join(model_folder, 'Squidly_CL_15B.pt')
-            
-        cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), fasta_file, esm2_model, cr_model_as, lstm_model_as, output_folder, '--toks_per_batch', 
+        if chunk != 0:
+            output_filenames = []
+            df_list = []
+            prev_chunk = 0
+            print(len(query_df))
+            for i in range(chunk, len(query_df) + chunk, chunk):
+                df_end = i
+                if df_end > len(query_df):
+                    df_end = len(query_df) - 1
+                df_list.append(query_df.iloc[[prev_chunk, df_end]])
+                print([prev_chunk, i])
+                prev_chunk = i 
+                
+            for i, df_chunk in tqdm(enumerate(df_list)):
+                chunk_fasta = os.path.join(output_folder, f'{run_name}_{i}_input_fasta.fasta')
+                with open(chunk_fasta, 'w+') as fout:
+                    records = list(SeqIO.parse(fasta_file, "fasta"))
+                    for seq_id, seq in df_chunk[['id', 'seq']].values:  # type: ignore 
+                        fout.write(f">{seq_id}\n{seq}\n")
+                cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), chunk_fasta, esm2_model, cr_model_as, lstm_model_as, output_folder, '--toks_per_batch', 
+                str(toks_per_batch), '--AS_threshold',  str(as_threshold)]
+                u.warn_p(["Running command:", ' '.join(cmd)])
+                subprocess.run(cmd, capture_output=True, text=True)
+                input_filename = fasta_file.split('/')[-1].split('.')[0]
+                output_filenames.append(os.path.join(output_folder, f'{input_filename}_results.pkl'))
+            df = pd.DataFrame()
+            print(output_filenames)
+            for p in output_filenames:
+                sub_df = pd.read_pickle(p)
+                df = pd.concat([df, sub_df])
+            # Save to a consolidated file
+            input_filename = fasta_file.split('/')[-1].split('.')[0]
+            squidly_df = df
+        else:
+            cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), fasta_file, esm2_model, cr_model_as, lstm_model_as, output_folder, '--toks_per_batch', 
             str(toks_per_batch), '--AS_threshold',  str(as_threshold)]
-    u.warn_p(["Running command:", ' '.join(cmd)])
-    subprocess.run(cmd, capture_output=True, text=True)       
-    # Now combine the two and save all to the output folder
-    # get the input filename 
-    input_filename = fasta_file.split('/')[-1].split('.')[0]
-    squidly_df = pd.read_pickle(os.path.join(output_folder, f'{input_filename}_results.pkl'))
+            u.warn_p(["Running command:", ' '.join(cmd)])
+            subprocess.run(cmd, capture_output=True, text=True)       
+            # Now combine the two and save all to the output folder
+            # get the input filename 
+            input_filename = fasta_file.split('/')[-1].split('.')[0]
+            squidly_df = pd.read_pickle(os.path.join(output_folder, f'{input_filename}_results.pkl'))
 
     ensemble = combine_squidly_blast(query_df, squidly_df, blast_df)
     blast_df.to_csv(os.path.join(output_folder, f'{run_name}_blast.csv'), index=False)
@@ -153,4 +194,6 @@ if __name__ == "__main__":
     
 # Example command
 # squidly AEGAN_with_active_site_seqs_NN.fasta esm2_t36_3B_UR50D
-#python __main__.py '../tests/AEGAN_with_active_site_seqs_NN.fasta' esm2_t36_3B_UR50D tmp/ --database ../data/reviewed_sprot_08042025.csv
+# python __main__.py '../tests/AEGAN_with_active_site_seqs_NN.fasta' esm2_t36_3B_UR50D tmp/ --database ../data/reviewed_sprot_08042025.csv
+# python __main__.py '../tests/AEGAN_with_active_site_seqs_NN.fasta' esm2_t36_3B_UR50D tmp/ --chunk 1
+# nohup python __main__.py /disk1/ariane/vscode/squidly/data/CARE/fastas/train_swissprot.fasta esm2_t36_3B_UR50D CARE/ train_swissprot --chunk 1000 & 
