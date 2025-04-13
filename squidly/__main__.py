@@ -45,7 +45,7 @@ app = typer.Typer()
 def combine_squidly_blast(query_df, squidly_df, blast_df):
     # Take from squidly and BLAST
     squidly_dict = dict(zip(squidly_df.label, squidly_df.Squidly_CR_Position))
-    blast_dict = dict(zip(blast_df.From, blast_df.Residues))
+    blast_dict = dict(zip(blast_df.From, blast_df.BLAST_residues))
     rows = []
     for seq_id in query_df['id'].values:
         if blast_dict.get(seq_id):
