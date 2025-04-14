@@ -19,6 +19,7 @@ Table with requirements:
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/Squidly.git
+cd Squidly
 # Install dependencies
 ./install.sh # Makes the squidly conda env
 
