@@ -1,5 +1,0 @@
-JobID           JobName    Elapsed     MaxRSS  MaxVMSize    ReqTRES 
------------- ---------- ---------- ---------- ---------- ---------- 
-12245136        MDH_ALL   00:12:08                       billing=1+ 
-12245136.ba+      batch   00:12:08                                  
-12245136.ex+     extern   00:12:08                                  
