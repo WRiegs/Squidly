@@ -1,3 +1,8 @@
+# python visualisation_scripts/dataset_vis.py --dataset /scratch/project/squid/Thesis_datasets/dataset_1.tsv --fasta_redundancy_reduced /scratch/project/squid/Thesis_datasets/dataset_1.fasta --output /scratch/project/squid/Thesis_datasets/vis/dataset_1
+# python visualisation_scripts/dataset_vis.py --dataset /scratch/project/squid/Thesis_datasets/dataset_2.tsv --fasta_redundancy_reduced /scratch/project/squid/Thesis_datasets/dataset_2.fasta --output /scratch/project/squid/Thesis_datasets/vis/dataset_2
+# python visualisation_scripts/dataset_vis.py --dataset /scratch/project/squid/Thesis_datasets/dataset_3.tsv --fasta_redundancy_reduced /scratch/project/squid/Thesis_datasets/dataset_3.fasta --output /scratch/project/squid/Thesis_datasets/vis/dataset_3
+# for dir in /scratch/project/squid/Thesis_datasets/vis/dataset_{1,2,3}; do for f in "$dir"/*; do mv "$f" "$dir/$(basename "$dir")_$(basename "$f")"; done; done
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -5,16 +10,14 @@ import seaborn as sns
 import argparse
 import glob
 import os
-
 plt.rcParams['svg.fonttype'] = 'none'
-
-# python /scratch/project/squid/code_modular/visualisation_scripts/dataset_vis.py --dataset /scratch/project/squid/code_modular/datasets/dataset_1.tsv --fasta_redundancy_reduced /scratch/project/squid/code_modular/reproduction_runs/small/reproducing_squidly_scheme_1_dataset_1_2024-11-14/Scheme1_2300000_1/0.9filtered_for_redundancy.fasta --output svg_figs/dataset1/
+plt.rcParams.update({'font.size': 18})  # Applies to everything
 
 def argparser():
     parser = argparse.ArgumentParser(description='Visualise dataset')
     parser.add_argument('--dataset', required=True, help='Path to dataset')
     parser.add_argument('--fasta_redundancy_reduced', required=True, help='Path to fasta file with redundancy reduced sequences')
-    parser.add_argument('--validation_set', required=False, help='Path to validation set')
+    #parser.add_argument('--validation_set', required=False, help='Path to validation set')
     parser.add_argument('--output', required=True, help='Path to output directory')
     args = parser.parse_args()
     return args
@@ -91,10 +94,7 @@ def gather_validation_set_data(df, output, dataset = 1, reproduction_run_dir="/s
     plt.figure(figsize=(6, 6))
     plt.pie(validation_set_ECs_counts, labels=validation_set_ECs_counts.index, autopct='%1.1f%%', textprops={'fontsize': 14})
     plt.title(f'Dataset {dataset}')
-    plt.savefig(os.path.join(output, f'dataset{dataset}_validation_set_EC_TX_pie_distribution.svg'), format="svg")
-    
-    
-    
+    plt.savefig(os.path.join(output, f'dataset{dataset}_validation_set_EC_TX_pie_distribution.svg'), format='svg')
     
 def main():
     dataset = 2
@@ -116,6 +116,11 @@ def main():
     
     # subset the df to only include the rows that are in the fasta file
     df = df[df["Entry"].isin(entry_names)]
+
+    # drop df if nan in EC
+    df = df.dropna(subset=["EC number"])
+    # drop df if nan in Active site
+    df = df.dropna(subset=["Active site"])
     
     df["EC_TX"] = get_EC_TX_from_uniprot(df, tier = 1)
     
@@ -129,13 +134,27 @@ def main():
     EC_TX_counts = EC_TX.value_counts()
     # colour the plot with a unique colour for each EC number
     colours = sns.color_palette("tab10", len(EC_TX_counts))
+
+    # use this pallette
+    colours = ['#FFC440', '#D7572B', '#3A53A4', '#AFC6CF', '#895981', '#937A64', '#A4C8E1']
+    order = ['1', 
+            '2',
+            '3',
+            '4',
+            '5',
+            '6',
+            '7'
+            ]
+
+
     plt.figure(figsize=(8, 5))
     sns.barplot(x=EC_TX_counts.index, y=EC_TX_counts.values, palette=colours)
     plt.xticks(rotation=90)
     plt.xlabel('Enzyme Class - Tier 1')
     plt.ylabel('Frequency')
     plt.title(f'Dataset {dataset}: Distribution of EC numbers (tier 1) in the dataset')
-    plt.savefig(os.path.join(args.output, 'EC_TX_distribution.svg'), format="svg")
+    plt.savefig(os.path.join(args.output, 'EC_TX_distribution.svg'), format='svg')
+    plt.savefig(os.path.join(args.output, 'EC_TX_distribution.png'), format='png')
     
     
     
@@ -160,7 +179,7 @@ def main():
         
     print(tier_2colours)
     
-    plt.figure(figsize=(15, 7))
+    plt.figure(figsize=(20, 9))
     sns.barplot(x=EC_TX_X_counts.index, y=EC_TX_X_counts.values, palette=tier_2colours)
     # add a legend that corresponds to the tier 1 EC number colours
     legend = []
@@ -170,23 +189,31 @@ def main():
     plt.xticks(rotation=90)
     plt.xlabel('Enzyme Class - Tier 2')
     plt.ylabel('Frequency')
-    plt.title(f'Dataset {dataset}: Distribution of EC numbers (tier 2) in the dataset')
-    plt.savefig(os.path.join(args.output, 'EC_TX.X_distribution.svg'), format="svg")
-    
+    plt.title(f'Distribution of EC numbers (tier 2) in the dataset {dataset}')
+    plt.savefig(os.path.join(args.output, 'EC_TX.X_distribution.svg'), format='svg')
+    plt.savefig(os.path.join(args.output, 'EC_TX.X_distribution.png'), format='png')
+    plt.close()
+
+    plt.rcParams.update({'font.size': 16})  # Applies to everything
+
     # plot the distribution of active site AAs in the dataset
     AAs = [item for sublist in df["Active_site_AAs"] for item in sublist]
     AAs = pd.Series(AAs)
     AAs_counts = AAs.value_counts()
     
     plt.figure(figsize=(10, 5))
-    sns.barplot(x=AAs_counts.index, y=AAs_counts.values)
+    sns.barplot(x=AAs_counts.index, y=AAs_counts.values, palette=['#895981'])
     plt.xlabel('Amino Acid')
     plt.ylabel('Frequency')
-    plt.title(f'Dataset {dataset}: Distribution of Catalytic Amino Acids in the dataset')
-    plt.savefig(os.path.join(args.output, 'Active_site_AAs_distribution.svg'), format="svg")
-    
-    
-    gather_validation_set_data(df, args.output, dataset = dataset)
+    plt.title(f'Distribution of Catalytic Amino Acids in the dataset {dataset}')
+    plt.savefig(os.path.join(args.output, 'Active_site_AAs_distribution.svg'), format='svg')
+    plt.savefig(os.path.join(args.output, 'Active_site_AAs_distribution.png'), format='png')
+    plt.close()
+
+    total_AAs = len(AAs)
+    print(f"Total number of Catalytic AAs: {total_AAs}")
+
+    #gather_validation_set_data(df, args.output, dataset = dataset)
     
     return
 
