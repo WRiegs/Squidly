@@ -127,6 +127,7 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
             records = list(SeqIO.parse(fasta_file, "fasta"))
             for seq_id, seq in remaining_df[['id', 'seq']].values:
                 fout.write(f">{seq_id}\n{seq}\n")
+        fasta_file = os.path.join(output_folder, f'{run_name}_input_fasta.fasta')
         # Now run squidly 
         u.warn_p(["Running Squidly on the following number of seqs: ", len(remaining_df)])
     # Other parsing
@@ -203,3 +204,8 @@ if __name__ == "__main__":
 # nohup squidly /disk1/ariane/vscode/squidly/data/CARE/fastas/train_swissprot.fasta esm2_t36_3B_UR50D output/ train_swissprot --database reviewed_sprot_08042025.csv --blast-threshold 30 & 
 # squidly cataloDB_test.fasta esm2_t36_3B_UR50D output/ cataloDB_3B --database swissprot_with_active_site_seqs_SquidlyBenchmark.csv --blast-threshold 30 --as-threshold 0.97 --lstm-model-as CataloDB_final_models/Squidly_LSTM_3B.pth --cr-model-as CataloDB_final_models/Squidly_CL_3B.pt
 # nohup squidly /disk1/ariane/vscode/squidly/data/CARE/fastas/protein_train.fasta esm2_t36_3B_UR50D /disk1/ariane/vscode/squidly/data/train_output/ protein_train & 
+# squidly /disk1/ariane/vscode/squidly/data/CARE/fastas/30_protein_test.fasta esm2_t36_3B_UR50D /disk1/ariane/vscode/squidly/data/train_output/ 30_protein_test
+# squidly /disk1/ariane/vscode/squidly/data/CARE/fastas/30_protein_test.fasta esm2_t36_3B_UR50D /disk1/ariane/vscode/squidly/data/train_output/ 30_protein_test_low_thresh --as-threshold 0.5
+# nohup squidly  /disk1/ariane/vscode/squidly/data/CARE/fastas/protein_train.fasta esm2_t36_3B_UR50D /disk1/ariane/vscode/squidly/data/train_output/ protein_train_low_thresh --as-threshold 0.5 --chunk 3000 &
+# squidly TPP_swissprot_predictions_top_20.fasta esm2_t36_3B_UR50D output/ TPP_swissprot_predictions_top_20 --database /disk1/ariane/vscode/squidly/data/reviewed_sprot_08042025.csv --blast-threshold 30 & 
+#  python __main__.py /disk1/ariane/vscode/squidly/helen/TPP_swissprot_predictions_top_20.fasta esm2_t36_3B_UR50D output/ /disk1/ariane/vscode/squidly/helen/TPP_swissprot_predictions_top_20 --database /disk1/ariane/vscode/squidly/data/reviewed_sprot_08042025.csv --blast-threshold 30
