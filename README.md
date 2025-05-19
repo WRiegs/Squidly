@@ -22,6 +22,7 @@ git clone https://github.com/yourusername/Squidly.git
 cd Squidly
 # Install dependencies
 ./install.sh # Makes the squidly conda env
+conda activate squidly
 
 # Build and install
 python setup.py sdist bdist_wheel
