@@ -1,0 +1,4 @@
+build/
+dist/
+clustalo
+squidly.egg-info/

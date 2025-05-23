@@ -73,7 +73,7 @@ def main():
         print(f"Number of reruns: {args.reruns}")
         
     # set up the output directory with todays date and the scheme/dataset
-    output_dir = pathlib.Path(f"dirty_reproducing_AEGAN_benchmark_squidly_scheme_{args.scheme}_{args.esm2_model}_{datetime.datetime.now().strftime('%Y-%m-%d')}")
+    output_dir = pathlib.Path(f"CLEANED_reproducing_AEGAN_benchmark_squidly_scheme_{args.scheme}_{args.esm2_model}_{datetime.datetime.now().strftime('%Y-%m-%d')}")
     if not output_dir.exists():
         os.makedirs(output_dir)
     print(f"Output directory: {output_dir}")
@@ -124,11 +124,7 @@ def main():
             #os.system(filtering)
             # if there's no embeddings dir setup already, then run the following -- ensures we don't generate the same embeddings multiple times
             if not os.path.exists(EMB):
-                if model_name == "esm2_t48_15B_UR50D":
-                    # copy it over to the new directory
-                    shutil.copytree("/scratch/project/squid/code_modular/dirty_reproducing_AEGAN_benchmark_squidly_scheme_2_esm2_t48_15B_UR50D_2025-01-11/embeddings", EMB)
-                else:
-                    os.system(extracting_esm)
+                os.system(extracting_esm)
             os.system(processing_pair_scheme)
             os.system(training_CL_model)
             os.system(converting_esm2_to_squidly)
