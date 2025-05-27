@@ -102,12 +102,22 @@ All datasets used in the paper are available here (contact Will or Ariane :) for
 We developed reproduction scripts for each benchmark training/test scenario.
 
 - **AEGAN and Common Benchmarks**: Trained on Uni14230 (AEGAN), and tested on Uni3175 (AEGAN), HA_superfamily, NN, PC, and EF datasets.
-- **CataloDB**: Short description: Trained on our proposed training and test set with structural/sequence ID filtering to less than 30% identity.
+- **CataloDB**: Trained on a curated training and test set with structural/sequence ID filtering to less than 30% identity.
 
 The corresponding scripts can be found in the reproduction_run directory.
+
+Before running them, download the datasets.zip file from zenodo and place them and unzip it in the base directory of Squidly.
+
+```bash
+python reproduction_scripts/reproduce_squidly_CataloDB.py --scheme 2 --sample_limit 16000 --esm2_model esm2_t36_3B_UR50D --reruns 1
+```
 
 You must choose the pair scheme for the Squidly models:
 <img src="pair_scheme_fig_.png" width=50%>
 
 Scheme 2 and 3 had the sample limit parameter set to 16000, and scheme 1 at 4000000.
+
+You must also correctly specify the ESM2 model used.
+You can either use esm2_t36_3B_UR50D or esm2_t48_15B_UR50D. The scripts will automatically download these if specified like so.
+You may also instead provide your own path to the models if you have them downloaded somewhere.
 
