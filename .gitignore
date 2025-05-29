@@ -2,3 +2,6 @@ build/
 dist/
 clustalo
 squidly.egg-info/
+datasets/family_specific_embeddings_esm2_t48_15B_UR50D
+datasets/family_specific_embeddings_esm2_t36_3B_UR50D
+datasets/

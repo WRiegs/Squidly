@@ -52,12 +52,9 @@ def main():
     else:
         raise Exception("No GPU detected")
     
-    # training datasets
-    dataset_fasta = "/scratch/project/squid/AEGAN_extracted_sequences/uni14230/uni14230.fasta"
-    dataset_metadata = "/scratch/project/squid/AEGAN_extracted_sequences/uni14230/uni14230.tsv"
-    
-    dataset_fasta = "/scratch/project/squid/AEGAN_extracted_sequences/train_test/uni3175_uni14230_unduplicated.fasta"
-    dataset_metadata = "/scratch/project/squid/AEGAN_extracted_sequences/train_test/uni3175_uni14230_unduplicated.tsv"
+    # datasets
+    dataset_fasta = "datasets/AEGAN_extracted_sequences/train_test/uni3175_uni14230_unduplicated.fasta"
+    dataset_metadata = "datasets/squid/AEGAN_extracted_sequences/train_test/uni3175_uni14230_unduplicated.tsv"
 
     if args.scheme == 1:
         print("Scheme 1 selected")
@@ -72,21 +69,20 @@ def main():
     if args.reruns:
         print(f"Number of reruns: {args.reruns}")
         
-    # set up the output directory with todays date and the scheme/dataset
-    output_dir = pathlib.Path(f"CLEANED_reproducing_AEGAN_benchmark_squidly_scheme_{args.scheme}_{args.esm2_model}_{datetime.datetime.now().strftime('%Y-%m-%d')}")
-    if not output_dir.exists():
-        os.makedirs(output_dir)
-    print(f"Output directory: {output_dir}")
-    
-    if args.esm2_model == "esm2_t48_15B_UR50D":
-        args.esm2_model="/scratch/project/squid/models/ESM2/esm2_t48_15B_UR50D.pt"
+    if args.esm2_model == "esm2_t48_15B_UR50D" or "esm2_t48_15B_UR50D" in args.esm2_model:
         layer = 48
         embedding_size = 5120
         model_name = "esm2_t48_15B_UR50D"
-    elif args.esm2_model == "esm2_t36_3B_UR50D":
+    elif args.esm2_model == "esm2_t36_3B_UR50D" or "esm2_t36_3B_UR50D" in args.esm2_model:
         layer = 36
         embedding_size = 2560
         model_name = "esm2_t36_3B_UR50D"
+    
+        # set up the output directory with todays date and the scheme/dataset
+    output_dir = pathlib.Path(f"CataloDB_{args.scheme}_{model_name}_{datetime.datetime.now().strftime('%Y-%m-%d')}")
+    if not output_dir.exists():
+        os.makedirs(output_dir)
+    print(f"Output directory: {output_dir}")
     
     ESM_MODEL= args.esm2_model
     PSCHEME_OUT=f"{output_dir}/Scheme{args.scheme}_{args.sample_limit}/"
@@ -95,23 +91,21 @@ def main():
     PAIR_SCHEME=f"{PSCHEME_OUT}/paired_embeddings_dataset.pt"
     META=f"{PSCHEME_OUT}metadata_paired.tsv"
     HPARAM="LSTM_Hyperparameters_bidirectional.json"
-    EVAL=f"/scratch/project/squid/AEGAN_extracted_sequences/uni3175/uni3175_unduplicated_entries.txt"      
+    EVAL="datasets/AEGAN_extracted_sequences/uni3175/uni3175_unduplicated_entries.txt"      
     LSTMOUT=f"{PSCHEME_OUT}LSTM/"
     MODEL=f"{PSCHEME_OUT}models/temp_best_model.pt"
     ASvBS="AS"
-    TEST="/scratch/project/squid/AEGAN_extracted_sequences/train_test/empty.txt"
-    AEGAN_benchmark_dir = f"/scratch/project/squid/code_modular/benchmark_data/family_specific_embeddings_{model_name}/"
+    TEST="datasets/CataloDB/empty_extra_test_validation.txt"
+    AEGAN_benchmark_dir = f"datasets/family_specific_embeddings_{model_name}/"
     AEGAN_benchmark_squid = f"{PSCHEME_OUT}family_specific_embeddings_squidly/"
     
     #AEGAN_leaked_entries = "/scratch/project/squid/AEGAN_extracted_sequences/train_test/overlapping_entries.txt"
         
-    #filtering = f"python lib/Redundancy_and_eval_set_filtering.py --fasta {dataset_fasta} --out {PSCHEME_OUT} --num_samples {eval_num} --experimental_data {experimental_df} --redundancy_threshold {redundancy_threshold}"
     extracting_esm = f"python lib/extract_esm2.py {ESM_MODEL} {dataset_fasta} {EMB} --toks_per_batch 1000 --include per_tok"
     processing_pair_scheme = f"python lib/pair_schemes.py --embedding_dir {EMB} --metadata {dataset_metadata} --sample_limit {args.sample_limit} --scheme {args.scheme} --eval {EVAL} --test {TEST} --out {PSCHEME_OUT} --layer {layer} --BSvAS {ASvBS} --create_torch"     
     training_CL_model = f"python lib/Squidly_CL_trainer.py --embedding_size {embedding_size} --pair_scheme {PAIR_SCHEME} --metadata {META} --out {PSCHEME_OUT}"
     converting_esm2_to_squidly = f"python lib/esm2squidly.py --model_location {MODEL} --embeddings_dir {EMB} --embedding_size {embedding_size} --out {EMB_REP} --layer {layer} --save_new_pt"
     converting_AEGAN_esm2_to_squidly = f"python lib/esm2squidly.py --model_location {MODEL} --embeddings_dir {AEGAN_benchmark_dir} --embedding_size {embedding_size} --out {AEGAN_benchmark_squid} --layer {layer} --save_new_pt"
-    training_XGBoost = f"python lib/XGBoost_trainer.py --rep_dir {EMB_REP} --meta {META} --eval {EVAL} --output {PSCHEME_OUT}" 
     training_LSTM = f"python lib/LSTM_trainer.py --contrastive_representations {EMB_REP} --metadata {META} --evaluation_set {EVAL} --test_set {TEST} --benchmark {AEGAN_benchmark_squid} --hyperparams {HPARAM} --output {LSTMOUT}"
 
     
@@ -121,7 +115,6 @@ def main():
             if not os.path.exists(PSCHEME_OUT):
                 os.makedirs(PSCHEME_OUT)
             print(f"Rerun {i+1}")
-            #os.system(filtering)
             # if there's no embeddings dir setup already, then run the following -- ensures we don't generate the same embeddings multiple times
             if not os.path.exists(EMB):
                 os.system(extracting_esm)
@@ -129,7 +122,6 @@ def main():
             os.system(training_CL_model)
             os.system(converting_esm2_to_squidly)
             os.system(converting_AEGAN_esm2_to_squidly)
-            os.system(training_XGBoost)
             os.system(training_LSTM)
             # delete the squidly embeddings and pair scheme
             shutil.rmtree(EMB_REP)
@@ -139,14 +131,12 @@ def main():
         # make the PSCHEME_OUT directory
         if not os.path.exists(PSCHEME_OUT):
             os.makedirs(PSCHEME_OUT)
-        #os.system(filtering)
         if not os.path.exists(EMB):
             os.system(extracting_esm)
         os.system(processing_pair_scheme)
         os.system(training_CL_model)
         os.system(converting_esm2_to_squidly)
         os.system(converting_AEGAN_esm2_to_squidly)
-        os.system(training_XGBoost)
         os.system(training_LSTM)
 
     # remove the embeddings directory
