@@ -178,7 +178,8 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
     else:
         cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), fasta_file, esm2_model, cr_model_as, lstm_model_as, output_folder, '--toks_per_batch', 
         str(toks_per_batch), '--AS_threshold',  str(as_threshold)]
-        u.warn_p(["Running command:", ' '.join(cmd)])
+        print(cmd)
+        u.warn_p(["Running non-batched command:", ' '.join(cmd)])
         subprocess.run(cmd, capture_output=True, text=True)       
         # Now combine the two and save all to the output folder
         # get the input filename 
