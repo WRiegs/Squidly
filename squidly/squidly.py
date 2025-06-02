@@ -265,6 +265,7 @@ def main(args):
         predicted_AS_residues = []
         AS_probabilities_list = []
         active_sites_reps = []
+        all_AS_probs_list = []
         CR_probabilities_predicted = []
         seq_lens = []
 
@@ -323,14 +324,14 @@ def main(args):
                 # find the probabilities of the active_sites
                 active_sites_probs = [AS_probabilities[i] for i in active_sites]
                 CR_probabilities_predicted.append(active_sites_probs)
-                
+                all_AS_probs_list.append(AS_probabilities)
                 predicted_AS_residues.append(active_sites)
                 active_sites_reps.append(as_site_reps)
                 embeddings_labels.append(result["label"])
     
     if csv is not None:
         results = []
-        for label, AS_residues, AS_probs, AS_site_reps in zip(embeddings_labels, predicted_AS_residues, CR_probabilities_predicted, active_sites_reps):        
+        for label, AS_residues, AS_probs, AS_site_reps, all_AS_probs in zip(embeddings_labels, predicted_AS_residues, CR_probabilities_predicted, active_sites_reps, all_AS_probs_list):        
             # grab the AA from the sequence itself given the AS_residue positions
             seq = df[df['Entry'] == label]['Sequence'].values[0]
             AS_AA = '|'.join([seq[residue] for residue in AS_residues])
@@ -339,27 +340,30 @@ def main(args):
             # Convert to a numpy array firt and flatten
             AS_probs = np.array(AS_probs).flatten()
             AS_probs = [round(float(prob), 4) for prob in AS_probs]
-            print(AS_probs)
+            all_AS_probs = np.array(all_AS_probs).flatten()
+            short_AS_probs = [round(float(prob), 4) for prob in all_AS_probs]
             AS_probs = '|'.join([str(prob) for prob in AS_probs])
             AS_site_reps = np.array(AS_site_reps)
-            results.append([label, AS_residues, AS_AA, AS_probs, AS_site_reps])
+            results.append([label, AS_residues, AS_AA, AS_probs, AS_site_reps, short_AS_probs])
 
         # save the results as a df, using the list of lists, with no index
-        results_df = pd.DataFrame(results, columns=["label", "Squidly_CR_Position", "Squidly_CR_AA", "Squidly_CR_probabilities", "Squidly_CR_representations"], index=None)
+        results_df = pd.DataFrame(results, columns=["label", "Squidly_CR_Position", "Squidly_CR_AA", "Squidly_CR_probabilities", "Squidly_CR_representations", "all_AS_probs"], index=None)
         results_df = pd.merge(df, results_df, how='left', left_on='Entry', right_on='label')
         results_df.to_csv(str(args.output_dir / args.file.stem) + '_results.pkl')
         args.file.unlink()  
     else:
         results = []
-        for label, AS_residues, AS_probs, AS_site_reps in zip(embeddings_labels, predicted_AS_residues, CR_probabilities_predicted, active_sites_reps):        
+        for label, AS_residues, AS_probs, AS_site_reps, all_AS_probs in zip(embeddings_labels, predicted_AS_residues, CR_probabilities_predicted, active_sites_reps, all_AS_probs_list):        
             AS_residues = '|'.join([str(residue) for residue in AS_residues])
             AS_probs = np.array(AS_probs).flatten()
             AS_probs = '|'.join([str(prob) for prob in AS_probs])
             AS_site_reps = np.array(AS_site_reps)
-            results.append([label, AS_residues, AS_probs, AS_site_reps])
+            all_AS_probs = np.array(all_AS_probs).flatten()
+            short_AS_probs = [round(float(prob), 4) for prob in all_AS_probs]
+            results.append([label, AS_residues, AS_probs, AS_site_reps, short_AS_probs])
 
         # save the results as a df, using the list of lists, with no index
-        results_df = pd.DataFrame(results, columns=["label", "Squidly_CR_Position", "Squidly_CR_probabilities", "Squidly_CR_representations"], index=None)
+        results_df = pd.DataFrame(results, columns=["label", "Squidly_CR_Position", "Squidly_CR_probabilities", "Squidly_CR_representations", "all_AS_probs"], index=None)
         results_df.to_pickle(str(args.output_dir / args.file.stem) + '_results.pkl')
     
     if args.logits:
