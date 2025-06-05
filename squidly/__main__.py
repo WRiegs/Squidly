@@ -33,8 +33,7 @@ import subprocess
 import timeit
 import logging
 from sciutil import SciUtil
-sys.path.append('/disk1/ariane/vscode/squidly/squidly/')
-from blast import *
+from squidly.blast import run_blast
 from tqdm import tqdm
 import numpy as np
 
@@ -45,7 +44,7 @@ logger.setLevel(logging.INFO)
 
 app = typer.Typer()
 
-def compute_uncertainties(df, prob_columns, mean_prob=0.5):
+def compute_uncertainties(df, prob_columns, mean_prob=0.8):
     means, aleatorics, epistemics, residues  = [], [], [], []
     for p1, p2, p3, p4, p5 in tqdm(df[prob_columns].values):
         mean_values = []
@@ -57,11 +56,11 @@ def compute_uncertainties(df, prob_columns, mean_prob=0.5):
             # Aleatoric: average predicted entropy
             eps = 1e-8  # for numerical stability
             # For each value we want the mean and the variance and the uncertainty
-            all_probs = [p1[j] + eps, p2[j] + eps, p3[j] + eps, p4[j] + eps, p5[j] + eps]
-            mean_probs = np.mean(all_probs) # (N, 10)
+            all_probs = np.array([p1[j] , p2[j], p3[j], p4[j], p5[j]])
+            mean_probs = np.mean(all_probs + eps) # (N, 10)
             var_probs = np.var(all_probs)    # epistemic uncertainty (variance across models)
 
-            entropies = -np.sum(all_probs * np.log(all_probs))  # (num_models, N)
+            entropies = -np.sum(all_probs * np.log(all_probs + eps))  # (num_models, N)
             aleatoric = np.mean(entropies)   # (N,)
 
             # Epistemic: entropy of mean prediction minus mean entropy
@@ -71,7 +70,7 @@ def compute_uncertainties(df, prob_columns, mean_prob=0.5):
                 indicies.append(j)
                 mean_values.append(mean_probs)
                 aleatoric_values.append(aleatoric)
-                epistemic_values.append(epistemics)
+                epistemic_values.append(epistemic)
         means.append(mean_values)
         aleatorics.append(aleatoric_values) 
         epistemics.append(epistemic_values)
@@ -111,7 +110,8 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
         toks_per_batch: Annotated[int, typer.Option(help="Run method (filter or complete) i.e. filter = only annotates with the next tool those that couldn't be found.")] = 5, 
         as_threshold: Annotated[float, typer.Option(help="Whether or not to keep multiple predicted values if False only the top result is retained.")] = 0.99,
         blast_threshold: Annotated[float, typer.Option(help="Sequence identity with which to use Squidly over BLAST defualt 0.3 (meaning for seqs with < 0.3 identity in the DB use Squidly).")] = 0.3,
-        chunk: Annotated[int, typer.Option(help="Max chunk size for the dataset.")] = 0):
+        chunk: Annotated[int, typer.Option(help="Max chunk size for the dataset.")] = 0, 
+        mean_prob: Annotated[float, typer.Option(help="Mean probability threshold for the dataset.")] = 0.8):
 
     """ 
     Find catalytic residues using Squidly and BLAST.
@@ -122,12 +122,14 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
     output_folder = output_folder if output_folder != 'Current Directory' else os.getcwd()
     query_rows = []
     # Clean fasta file
+    id_to_new_id = {}
     with open(os.path.join(output_folder, f'{run_name}_input_fasta.fasta'), 'w+') as fout:
         records = list(SeqIO.parse(fasta_file, "fasta"))
         done_records = []
         # Remove all the ids
         for record in tqdm(records):
             new_id = re.sub('[^0-9a-zA-Z]+', '', record.id)
+            id_to_new_id[record.id] = new_id
             if new_id not in done_records:
                 query_rows.append([new_id, record.seq])
                 fout.write(f">{new_id}\n{record.seq}\n")
@@ -150,6 +152,7 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
         
         # Run blast 
         blast_df = run_blast(query_df, database_df, output_folder, run_name, id_col='id', seq_col='seq')
+        blast_df['id'] = blast_df['From'].map(id_to_new_id)
         # Now filter to use squidly on those that weren't identified
         entries_found = []
         for entry, seq_identity, residue in blast_df[['From', 'sequence identity', 'BLAST_residues']].values:
@@ -185,18 +188,18 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
     if ensemble:
         u.warn_p(["Running ensemble"])
         models = [
-            [os.path.join(model_folder, f'CataloDB_{model_size}_CR_1.pth'), os.path.join(model_folder, f'CataloDB_{model_size}_LSTM_1.pth')],
-            [os.path.join(model_folder, f'CataloDB_{model_size}_CR_2.pth'), os.path.join(model_folder, f'CataloDB_{model_size}_LSTM_2.pth')],
-            [os.path.join(model_folder, f'CataloDB_{model_size}_CR_3.pth'), os.path.join(model_folder, f'CataloDB_{model_size}_LSTM_3.pth')],
-            [os.path.join(model_folder, f'CataloDB_{model_size}_CR_4.pth'), os.path.join(model_folder, f'CataloDB_{model_size}_LSTM_4.pth')],
-            [os.path.join(model_folder, f'CataloDB_{model_size}_CR_5.pth'), os.path.join(model_folder, f'CataloDB_{model_size}_LSTM_5.pth')]]
+            [os.path.join(model_folder, f'CataloDB_{model_size}_CR_1.pt'), os.path.join(model_folder, f'CataloDB_{model_size}_LSTM_1.pth')],
+            [os.path.join(model_folder, f'CataloDB_{model_size}_CR_2.pt'), os.path.join(model_folder, f'CataloDB_{model_size}_LSTM_2.pth')],
+            [os.path.join(model_folder, f'CataloDB_{model_size}_CR_3.pt'), os.path.join(model_folder, f'CataloDB_{model_size}_LSTM_3.pth')],
+            [os.path.join(model_folder, f'CataloDB_{model_size}_CR_4.pt'), os.path.join(model_folder, f'CataloDB_{model_size}_LSTM_4.pth')],
+            [os.path.join(model_folder, f'CataloDB_{model_size}_CR_5.pt'), os.path.join(model_folder, f'CataloDB_{model_size}_LSTM_5.pth')]]
     else:
         models = [[cr_model_as, lstm_model_as]]
         u.warn_p(["Running single model"])
     squidly_ensemble = pd.DataFrame()
     for model_i, model in enumerate(models):
+        cr_model_as, lstm_model_as = model
         if chunk != 0:
-            cr_model_as, lstm_model_as = model
             u.dp(["Chunking"])
             output_filenames = []
             df_list = []
@@ -242,7 +245,7 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
             squidly_df = pd.read_pickle(os.path.join(output_folder, f'{input_filename}_results.pkl'))
             squidly_ensemble = squidly_ensemble.join(squidly_df, how='outer', rsuffix=f'_{model_i}')
 
-    means, aleatorics, epistemics, residues = compute_uncertainties(squidly_ensemble, ['all_AS_probs', 'all_AS_probs_1', 'all_AS_probs_2', 'all_AS_probs_3', 'all_AS_probs_4'])
+    means, aleatorics, epistemics, residues = compute_uncertainties(squidly_ensemble, ['all_AS_probs', 'all_AS_probs_1', 'all_AS_probs_2', 'all_AS_probs_3', 'all_AS_probs_4'], mean_prob)
     squidly_ensemble['mean'] = means
     squidly_ensemble['aleatoric'] = aleatorics
     squidly_ensemble['epistemic'] = epistemics

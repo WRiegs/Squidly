@@ -41,8 +41,7 @@ setup(name='squidly',
       packages=['squidly'],
     include_package_data=True,
       package_data={
-          'squidly': ['models/Squidly_CL_15B.pt', 'models/Squidly_CL_3B.pt', 
-                      'data/Squidly_LSTM_15B.pth', 'models/Squidly_LSTM_3B.pth'],
+          'squidly': ['models/*'],
       },
       entry_points={
           'console_scripts': [

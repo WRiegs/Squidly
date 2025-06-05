@@ -22,3 +22,5 @@ __version__ = '0.0.1'
 __author__ = 'William Rieger, Ariane Mora'
 __author_email__ = 'willsemail'
 __license__ = 'GPL3'
+
+from squidly.blast import run_blast
