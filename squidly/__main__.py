@@ -57,7 +57,7 @@ def compute_uncertainties(df, prob_columns, mean_prob=0.8):
             eps = 1e-8  # for numerical stability
             # For each value we want the mean and the variance and the uncertainty
             all_probs = np.array([p1[j] , p2[j], p3[j], p4[j], p5[j]])
-            mean_probs = np.mean(all_probs + eps) # (N, 10)
+            mean_probs = np.mean(all_probs) # (N, 10)
             var_probs = np.var(all_probs)    # epistemic uncertainty (variance across models)
 
             entropies = -np.sum(all_probs * np.log(all_probs + eps))  # (num_models, N)
@@ -75,7 +75,7 @@ def compute_uncertainties(df, prob_columns, mean_prob=0.8):
         aleatorics.append(aleatoric_values) 
         epistemics.append(epistemic_values)
         residues.append('|'.join([str(s) for s in indicies]))
-    return means, aleatorics, epistemics, residues
+    return means, aleatorics, epistemics, residues, var_probs
 
 
 def combine_squidly_blast(query_df, squidly_df, blast_df):
@@ -231,7 +231,7 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
             # Save to a consolidated file
             input_filename = fasta_file.split('/')[-1].split('.')[0]
             squidly_df = df
-            squidly_df.set_index('label', inplace=True)
+            squidly_df.to_csv(os.path.join(output_folder, f'{input_filename}_squidly_{model_i}.csv'), index=False)
             squidly_ensemble = squidly_ensemble.join(squidly_df, how='outer', rsuffix=f'_{model_i}')
         else:
             cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), fasta_file, esm2_model, cr_model_as, lstm_model_as, output_folder, '--toks_per_batch', 
@@ -242,13 +242,18 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
             # Now combine the two and save all to the output folder
             # get the input filename 
             input_filename = fasta_file.split('/')[-1].split('.')[0]
+        
             squidly_df = pd.read_pickle(os.path.join(output_folder, f'{input_filename}_results.pkl'))
+            squidly_df.to_pickle(os.path.join(output_folder, f'{input_filename}_squidly_{model_i}.pkl'))
+
             squidly_ensemble = squidly_ensemble.join(squidly_df, how='outer', rsuffix=f'_{model_i}')
 
-    means, aleatorics, epistemics, residues = compute_uncertainties(squidly_ensemble, ['all_AS_probs', 'all_AS_probs_1', 'all_AS_probs_2', 'all_AS_probs_3', 'all_AS_probs_4'], mean_prob)
+    means, aleatorics, epistemics, residues, variance = compute_uncertainties(squidly_ensemble, ['all_AS_probs', 'all_AS_probs_1', 'all_AS_probs_2', 'all_AS_probs_3', 'all_AS_probs_4'], mean_prob)
     squidly_ensemble['mean'] = means
     squidly_ensemble['aleatoric'] = aleatorics
+    squidly_ensemble['variance'] = variance
     squidly_ensemble['epistemic'] = epistemics
+
     squidly_ensemble['Squidly_Ensemble_Residues'] = residues
     squidly_ensemble.set_index('label', inplace=True)
     
@@ -278,3 +283,4 @@ if __name__ == "__main__":
 #  python __main__.py /disk1/ariane/vscode/squidly/helen/TPP_swissprot_predictions_top_20.fasta esm2_t36_3B_UR50D output/ /disk1/ariane/vscode/squidly/helen/TPP_swissprot_predictions_top_20 --database /disk1/ariane/vscode/squidly/data/reviewed_sprot_08042025.csv --blast-threshold 30
 
 # python squidly.py ../manuscript/cataloDB_test.fasta esm2_t36_3B_UR50D ../models/FinalModels/CataloDB_models_3_esm2_t36_3B_UR50D_2025-04-13/Scheme3_16000_2/models/temp_best_model.pt ../models/FinalModels/CataloDB_models_3_esm2_t36_3B_UR50D_2025-04-13/Scheme3_16000_2/LSTM/models/13-04-25_16-48_128_2_0.2_100_best_model.pth output/ --toks_per_batch 5 --AS_threshold 0.9
+# squidly input_data/cataloDB_test.fasta esm2_t36_3B_UR50D cataloDB_output/ --mean-prob 0.5
