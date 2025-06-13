@@ -16,6 +16,9 @@ chmod +x clustalo
 echo export PATH=$PATH:$PWD/bin >> ~/.bashrc 
 source ~/.bashrc
 
+# install enzyme-tk
+pip install enzymetk
+
 # downloading and using a BLAST database
 # update_blastdb.pl --decompress --blastdb_version 5 swissprot
 # ./diamond prepdb -d swissprot
