@@ -118,7 +118,13 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
     """
     u.dp(['Starting squidly... '])
     pckage_dir = dirname(__file__)
-    model_folder = os.path.join(dirname(__file__), 'models')
+    if esm2_model == 'esm2_t36_3B_UR50D':
+        model_folder = os.path.join(dirname(__file__), 'models', '3B')
+    elif esm2_model == 'esm2_t48_15B_UR50D':
+        model_folder = os.path.join(dirname(__file__), 'models', '15B')
+    if ensemble and not os.path.exists(model_folder):
+            u.err_p(['ERROR: The model folder does not exist:', model_folder, ". You might need to download it from huggingface. Ensure it is placed in the correct location."])
+            return
     output_folder = output_folder if output_folder != 'Current Directory' else os.getcwd()
     query_rows = []
     # Clean fasta file

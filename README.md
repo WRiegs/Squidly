@@ -96,7 +96,7 @@ Where `reviewed_sprot_08042025.csv` is the example database (i.e. a csv file wit
 ```
 
 ## Data Availability
-All datasets used in the paper are available here (contact Will or Ariane :) for now)
+All datasets used in the paper are available here https://zenodo.org/records/15541320.
 
 ## Reproducing Squidly
 We developed reproduction scripts for each benchmark training/test scenario.
@@ -107,6 +107,12 @@ We developed reproduction scripts for each benchmark training/test scenario.
 The corresponding scripts can be found in the reproduction_run directory.
 
 Before running them, download the datasets.zip file from zenodo and place them and unzip it in the base directory of Squidly.
+
+Datasets:
+https://zenodo.org/records/15541320
+
+Model weights:
+https://huggingface.co/WillRieger/Squidly
 
 ```bash
 python reproduction_scripts/reproduce_squidly_CataloDB.py --scheme 2 --sample_limit 16000 --esm2_model esm2_t36_3B_UR50D --reruns 1
