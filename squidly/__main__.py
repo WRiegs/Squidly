@@ -184,21 +184,19 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
         u.warn_p(["Running with user supplied squidly models:  ", cr_model_as, lstm_model_as])
     else:
         if esm2_model == 'esm2_t36_3B_UR50D':
-            model_size = '3B'
             lstm_model_as = os.path.join(model_folder, 'Squidly_LSTM_3B.pth')
             cr_model_as = os.path.join(model_folder, 'Squidly_CL_3B.pt')
         elif esm2_model == 'esm2_t48_15B_UR50D':
-            model_size = '15B'
             lstm_model_as = os.path.join(model_folder, 'Squidly_LSTM_15B.pth')
             cr_model_as = os.path.join(model_folder, 'Squidly_CL_15B.pt')
     if ensemble:
         u.warn_p(["Running ensemble"])
         models = [
-            [os.path.join(model_folder, f'CataloDB_{model_size}_CR_1.pt'), os.path.join(model_folder, f'CataloDB_{model_size}_LSTM_1.pth')],
-            [os.path.join(model_folder, f'CataloDB_{model_size}_CR_2.pt'), os.path.join(model_folder, f'CataloDB_{model_size}_LSTM_2.pth')],
-            [os.path.join(model_folder, f'CataloDB_{model_size}_CR_3.pt'), os.path.join(model_folder, f'CataloDB_{model_size}_LSTM_3.pth')],
-            [os.path.join(model_folder, f'CataloDB_{model_size}_CR_4.pt'), os.path.join(model_folder, f'CataloDB_{model_size}_LSTM_4.pth')],
-            [os.path.join(model_folder, f'CataloDB_{model_size}_CR_5.pt'), os.path.join(model_folder, f'CataloDB_{model_size}_LSTM_5.pth')]]
+            [os.path.join(model_folder, f'CataloDB_{esm2_model}_CR_1.pt'), os.path.join(model_folder, f'CataloDB_{esm2_model}_LSTM_1.pth')],
+            [os.path.join(model_folder, f'CataloDB_{esm2_model}_CR_2.pt'), os.path.join(model_folder, f'CataloDB_{esm2_model}_LSTM_2.pth')],
+            [os.path.join(model_folder, f'CataloDB_{esm2_model}_CR_3.pt'), os.path.join(model_folder, f'CataloDB_{esm2_model}_LSTM_3.pth')],
+            [os.path.join(model_folder, f'CataloDB_{esm2_model}_CR_4.pt'), os.path.join(model_folder, f'CataloDB_{esm2_model}_LSTM_4.pth')],
+            [os.path.join(model_folder, f'CataloDB_{esm2_model}_CR_5.pt'), os.path.join(model_folder, f'CataloDB_{esm2_model}_LSTM_5.pth')]]
     else:
         models = [[cr_model_as, lstm_model_as]]
         u.warn_p(["Running single model"])

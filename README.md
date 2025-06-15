@@ -26,7 +26,7 @@ conda activate squidly
 
 # Build and install
 python setup.py sdist bdist_wheel
-pip install dist/squidly-0.0.1.tar.gz 
+pip install dist/squidly-0.0.2.tar.gz 
 ```
 
 Torch with cuda 11.8+ must be installed.

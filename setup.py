@@ -19,13 +19,13 @@ setup(name='squidly',
       long_description=readme(),
       long_description_content_type='text/markdown',
       author='William Reiger',
-      author_email='willsemail',
-      url='https://github.com/ArianeMora/annotate-e',
+      author_email='w.rieger@uq.edu.au',
+      url='https://github.com/WRiegs/Squidly',
       license='GPL3',
       project_urls={
-          "Bug Tracker": "https://github.com/ArianeMora/annotate-e/issues",
-          "Documentation": "https://github.com/ArianeMora/annotate-e",
-          "Source Code": "https://github.com/ArianeMora/annotate-e",
+          "Bug Tracker": "https://github.com/WRiegs/Squidly/issues",
+          "Documentation": "https://github.com/WRiegs/Squidly",
+          "Source Code": "https://github.com/WRiegs/Squidly",
       },
       classifiers=[
           'Intended Audience :: Science/Research',
@@ -41,7 +41,7 @@ setup(name='squidly',
       packages=['squidly'],
     include_package_data=True,
       package_data={
-          'squidly': ['models/*'],
+          'squidly': ['models/**/*'],
       },
       entry_points={
           'console_scripts': [
