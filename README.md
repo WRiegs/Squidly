@@ -12,9 +12,7 @@ Also if you have any issues installing, please post an issue! We have tested thi
 Squidly is dependant on the ESM2 3B or 15B protein language model. Running Suidly will automatically attempt to download each model.
 The Smaller 3B model is lighter, runs faster and requires less VRAM. 
 
-Table with requirements:
-3B: 
-15B: 
+Currently we expect GPU access but if you require a CPU only version please let us know and we can update this!
 
 ### Installation Steps
 ```bash
