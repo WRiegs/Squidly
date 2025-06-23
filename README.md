@@ -3,8 +3,9 @@
 
 Squidly, is a tool that employs a biologically informed contrastive learning approach to accurately predict catalytic residues from enzyme sequences. We offer Squidly as ensembled with Blast to achieve high accuracy at low and high sequence homology settings.
 
-publication:
-blah
+If you use squidly in your work please cite our preprint: https://www.biorxiv.org/content/10.1101/2025.06.13.659624v1
+
+Also if you have any issues installing, please post an issue! We have tested this on ubuntu.
 
 ## 📥 Installation
 ### Requirements
