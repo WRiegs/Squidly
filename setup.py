@@ -41,7 +41,7 @@ setup(name='squidly',
       packages=['squidly'],
     include_package_data=True,
       package_data={
-          'squidly': ['models/**/*'],
+          'squidly': ['install/install.sh'],
       },
       entry_points={
           'console_scripts': [

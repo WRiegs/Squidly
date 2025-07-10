@@ -33,9 +33,17 @@ import subprocess
 import timeit
 import logging
 from sciutil import SciUtil
-from squidly.blast import run_blast
 from tqdm import tqdm
 import numpy as np
+from enzymetk.sequence_search_blast import BLAST
+from Bio import SeqIO
+import os
+from Bio import AlignIO
+# Read in squidly results
+import numpy as np
+import re
+from sciutil import SciUtil
+import pandas as pd
 
 u = SciUtil()
 logger = logging.getLogger(__name__)
@@ -44,6 +52,98 @@ logger.setLevel(logging.INFO)
 
 app = typer.Typer()
 
+
+
+u = SciUtil()
+
+
+def align_blast_to_seq(df, database, output_folder) -> pd.DataFrame:
+    """ 
+    Align the sequneces into BLAST. 
+    Note expects the database to have an entry as the sequnece ID and the residue to be the catalytic residues.
+    """
+    predicted_active_sites = {}
+    missing = 0
+    uniprot_id_to_active_site = dict(zip(database['Entry'], database['Residue']))
+    for query, uniprot in df[['From', 'target']].values:
+        missing = 0
+        if not uniprot or not isinstance(uniprot, str):
+            missing += 1
+        else:
+            fin = os.path.join(output_folder, f'{uniprot}_{query}.msa')
+            # Read the alignment
+            active_sites = [int(x) for x in uniprot_id_to_active_site.get(uniprot).split('|')] # type: ignore
+            alignment = AlignIO.read(fin, 'fasta')
+            # get the existing one and then calculate the position gapped
+            records = {}
+            for record in alignment:
+                records[record.id] = record.seq
+            # Now get the active site
+            position_count = 0
+            active_pred = []
+            query_seq = records[query]
+            query_count = 0
+            x = 0
+            for i, v in enumerate(records[uniprot]):
+                if position_count in active_sites:
+                    if query_count < len(query_seq.replace('-', '')):
+                        active_pred.append(query_count)
+                    if query_seq[i] != v:
+                        x += 1
+                        #print(query, uniprot, v, query_seq[i])
+                if v != '-':
+                    position_count += 1
+                if query_seq[i] != '-' and query_seq[i] != ' ':
+                    query_count += 1
+        
+            predicted_active_sites[query] = '|'.join([str(s) for s in active_pred])
+            # Now we can just add on the
+    df['BLAST_residues'] = [predicted_active_sites.get(label) for label in df['From'].values]
+    return df
+
+
+def run_blast(query_df, database_df, output_folder, run_name, id_col='id', seq_col='seq') -> pd.DataFrame:
+    # Convert databaset to a fasta file in the output folder
+    database_fasta = os.path.join(output_folder, f'{run_name}_database.fasta')
+    with open(database_fasta, 'w+') as fout:
+        for seq_id, seq in database_df[['Entry', 'Sequence']].values:
+            done_records = []
+            # Remove all the ids
+            new_id = re.sub('[^0-9a-zA-Z]+', '', seq_id)
+            if new_id not in done_records:
+                fout.write(f">{new_id}\n{seq}\n")
+            else:
+                u.warn_p(['Had a duplicate record! Only keeping the first entry, duplicate ID:', new_id])
+    # Run BLAST now with the db
+    blast_df = (query_df << (BLAST(id_col, seq_col, database=database_fasta, args=['--ultra-sensitive'])))
+    blast_df = blast_df.sort_values(by='sequence identity', ascending=False)
+    
+    # Remove duplicates 
+    blast_df.drop_duplicates('query', inplace=True)
+
+    #Then join up with all df
+    blast_df.set_index('query', inplace=True)
+    query_df.set_index(id_col, inplace=True)
+    query_df['From'] = query_df.index
+    test_df = query_df.join(blast_df, how='left')
+    
+    # Make a dictionary from the fasta file
+    uniprot_id_to_seq = dict(zip(database_df.Entry, database_df.Sequence))
+    output_folder = os.path.join(output_folder, "msa")
+    os.system(f'mkdir {output_folder}')
+    for name, seq, uniprot in test_df[['From', 'seq', 'target']].values:
+        fin = os.path.join(output_folder, f'{uniprot}_{name}.fa')
+        with open(fin, 'w+') as fout:
+            fout.write(f'>{uniprot}\n{uniprot_id_to_seq.get(uniprot)}\n')
+            fout.write(f'>{name}\n{seq}')
+        # Now run clustalomega
+        os.system(f'clustalo --force -i {fin} -o {fin.replace(".fa", ".msa")}')
+        
+    # Now we can align to the sequneces
+    return align_blast_to_seq(test_df, database_df, output_folder)        
+      
+                    
+                    
 def compute_uncertainties(df, prob_columns, mean_prob=0.8):
     means, aleatorics, epistemics, residues  = [], [], [], []
     for p1, p2, p3, p4, p5 in tqdm(df[prob_columns].values):
@@ -99,11 +199,23 @@ def combine_squidly_blast(query_df, squidly_df, blast_df):
     return pd.DataFrame(rows, columns=['id', 'residues', 'tool'])
 
 @app.command()
+def install():
+    """
+    Install the models for the package.
+    """
+    u.dp(['Installing models... '])
+    u.dp(['If this fails please see the github and follow the installation instructions.'])
+
+    pckage_dir = dirname(__file__)
+    os.system(f'source {pckage_dir}/install.sh')
+        
+@app.command()
 def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta (note have simple IDs otherwise we'll remove all funky characters.)")],
         esm2_model: Annotated[str, typer.Argument(help="Name of the esm2_model, esm2_t36_3B_UR50D or esm2_t48_15B_UR50D")], 
         output_folder: Annotated[str, typer.Argument(help="Where to store results (full path!)")] = 'Current Directory', 
         run_name: Annotated[str, typer.Argument(help="Name of the run")] = 'squidly', 
         ensemble: Annotated[bool, typer.Option(help="Whether or not to do the ensemble.")] = True,
+        model_folder: Annotated[str, typer.Option(help="Full path to the model folder.")] = '',
         database:  Annotated[str, typer.Option(help="Full path to database csv (if you want to do the ensemble), needs 3 columns: 'Entry', 'Sequence', 'Residue' where residue is a | separated list of residues. See default DB provided by Squidly.")] = 'None',
         cr_model_as: Annotated[str, typer.Option(help="Optional: Model for the catalytic residue prediction i.e. not using the default with the package. Ensure it matches the esmmodel.")] = '', 
         lstm_model_as: Annotated[str, typer.Option(help="Optional: LSTM model path for the catalytic residue prediction i.e. not using the default with the package. Ensure it matches the esmmodel.")] = '', 
@@ -117,11 +229,16 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
     Find catalytic residues using Squidly and BLAST.
     """
     u.dp(['Starting squidly... '])
+    model_folder = model_folder if model_folder != '' else os.path.join(dirname(__file__), 'models')
     pckage_dir = dirname(__file__)
+    # Other parsing
+    if esm2_model not in ['esm2_t36_3B_UR50D', 'esm2_t48_15B_UR50D']:
+        u.err_p(['ERROR: your ESM model must be one of', 'esm2_t36_3B_UR50D', 'esm2_t48_15B_UR50D']) 
+        return
     if esm2_model == 'esm2_t36_3B_UR50D':
-        model_folder = os.path.join(dirname(__file__), 'models', '3B')
+        esm2_model_dir = '3B'
     elif esm2_model == 'esm2_t48_15B_UR50D':
-        model_folder = os.path.join(dirname(__file__), 'models', '15B')
+        esm2_model_dir = '15B'
     if ensemble and not os.path.exists(model_folder):
             u.err_p(['ERROR: The model folder does not exist:', model_folder, ". You might need to download it from huggingface. Ensure it is placed in the correct location."])
             return
@@ -176,27 +293,24 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
         fasta_file = os.path.join(output_folder, f'{run_name}_input_fasta.fasta')
         # Now run squidly 
         u.warn_p(["Running Squidly on the following number of seqs: ", len(remaining_df)])
-    # Other parsing
-    if esm2_model not in ['esm2_t36_3B_UR50D', 'esm2_t48_15B_UR50D']:
-        u.err_p(['ERROR: your ESM model must be one of', 'esm2_t36_3B_UR50D', 'esm2_t48_15B_UR50D']) 
-        return
+
     elif cr_model_as != '' and lstm_model_as != '':
         u.warn_p(["Running with user supplied squidly models:  ", cr_model_as, lstm_model_as])
     else:
-        if esm2_model == 'esm2_t36_3B_UR50D':
+        if esm2_model == '3B':
             lstm_model_as = os.path.join(model_folder, 'Squidly_LSTM_3B.pth')
             cr_model_as = os.path.join(model_folder, 'Squidly_CL_3B.pt')
-        elif esm2_model == 'esm2_t48_15B_UR50D':
+        elif esm2_model == '15B':
             lstm_model_as = os.path.join(model_folder, 'Squidly_LSTM_15B.pth')
             cr_model_as = os.path.join(model_folder, 'Squidly_CL_15B.pt')
     if ensemble:
         u.warn_p(["Running ensemble"])
         models = [
-            [os.path.join(model_folder, f'CataloDB_{esm2_model}_CR_1.pt'), os.path.join(model_folder, f'CataloDB_{esm2_model}_LSTM_1.pth')],
-            [os.path.join(model_folder, f'CataloDB_{esm2_model}_CR_2.pt'), os.path.join(model_folder, f'CataloDB_{esm2_model}_LSTM_2.pth')],
-            [os.path.join(model_folder, f'CataloDB_{esm2_model}_CR_3.pt'), os.path.join(model_folder, f'CataloDB_{esm2_model}_LSTM_3.pth')],
-            [os.path.join(model_folder, f'CataloDB_{esm2_model}_CR_4.pt'), os.path.join(model_folder, f'CataloDB_{esm2_model}_LSTM_4.pth')],
-            [os.path.join(model_folder, f'CataloDB_{esm2_model}_CR_5.pt'), os.path.join(model_folder, f'CataloDB_{esm2_model}_LSTM_5.pth')]]
+            [os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_CR_1.pt'), os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_LSTM_1.pth')],
+            [os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_CR_2.pt'), os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_LSTM_2.pth')],
+            [os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_CR_3.pt'), os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_LSTM_3.pth')],
+            [os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_CR_4.pt'), os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_LSTM_4.pth')],
+            [os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_CR_5.pt'), os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_LSTM_5.pth')]]
     else:
         models = [[cr_model_as, lstm_model_as]]
         u.warn_p(["Running single model"])
@@ -288,3 +402,5 @@ if __name__ == "__main__":
 
 # python squidly.py ../manuscript/cataloDB_test.fasta esm2_t36_3B_UR50D ../models/FinalModels/CataloDB_models_3_esm2_t36_3B_UR50D_2025-04-13/Scheme3_16000_2/models/temp_best_model.pt ../models/FinalModels/CataloDB_models_3_esm2_t36_3B_UR50D_2025-04-13/Scheme3_16000_2/LSTM/models/13-04-25_16-48_128_2_0.2_100_best_model.pth output/ --toks_per_batch 5 --AS_threshold 0.9
 # squidly input_data/cataloDB_test.fasta esm2_t36_3B_UR50D cataloDB_output/ --mean-prob 0.5
+
+#  squidly run /disk1/ariane/vscode/cec_degrader/to_publish/extremeophiles.fasta esm2_t36_3B_UR50D   --database data/reviewed_sprot_08042025.csv

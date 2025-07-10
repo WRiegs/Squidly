@@ -22,6 +22,8 @@ cd Squidly
 # Install dependencies
 ./install.sh # Makes the squidly conda env
 conda activate squidly
+# install diamond for BLAST
+conda install -c bioconda -c conda-forge diamond
 
 # Build and install
 python setup.py sdist bdist_wheel
@@ -34,14 +36,16 @@ https://pytorch.org/get-started/locally/
 ## Usage
 For example to run the 3B model with a fasta file (in squidly only mode)
 ```bash
-squidly example.fasta esm2_t36_3B_UR50D 
+squidly run example.fasta esm2_t36_3B_UR50D 
 ```
 
 Or to run as an ensemble with BLAST (you need to pass the database as well)
 ```
-squidly example.fasta esm2_t36_3B_UR50D output_folder/ --database reviewed_sprot_08042025.csv
+squidly run example.fasta esm2_t36_3B_UR50D output_folder/ --database reviewed_sprot_08042025.csv
 ```
-Where `reviewed_sprot_08042025.csv` is the example database (i.e. a csv file with the following columns)
+Where `reviewed_sprot_08042025.csv` is the example database (i.e. a csv file with the following columns) 
+
+You can see ours which is zipped in the data folder..
 
 
 | Entry      | Sequence         | Residue                                  |
