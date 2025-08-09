@@ -1,4 +1,5 @@
-# 🦑Squidly
+# Squidly ![Squid](squidly.png)
+
 ![Overview Figure](overview_fig_.png)
 
 Squidly, is a tool that employs a biologically informed contrastive learning approach to accurately predict catalytic residues from enzyme sequences. We offer Squidly as ensembled with Blast to achieve high accuracy at low and high sequence homology settings.
@@ -7,13 +8,12 @@ If you use squidly in your work please cite our preprint: https://www.biorxiv.or
 
 Also if you have any issues installing, please post an issue! We have tested this on ubuntu.
 
-## 📥 Installation
 ### Requirements
 Squidly is dependant on the ESM2 3B or 15B protein language model. Running Suidly will automatically attempt to download each model.
 The Smaller 3B model is lighter, runs faster and requires less VRAM. 
 
 Currently we expect GPU access but if you require a CPU only version please let us know and we can update this!
-### Simple installation
+### Installation
 ```
 conda create --name squidly python=3.10
 conda activate squidly
