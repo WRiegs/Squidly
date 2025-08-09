@@ -1,8 +1,10 @@
-# Squidly ![Squid](squid.png)
+# Squidly 
+
+
 
 ![Overview Figure](overview_fig_.png)
 
-Squidly, is a tool that employs a biologically informed contrastive learning approach to accurately predict catalytic residues from enzyme sequences. We offer Squidly as ensembled with Blast to achieve high accuracy at low and high sequence homology settings.
+<img src="squid.png" alt="drawing" width="30"/> Squidly, is a tool that employs a biologically informed contrastive learning approach to accurately predict catalytic residues from enzyme sequences. We offer Squidly as ensembled with Blast to achieve high accuracy at low and high sequence homology settings.
 
 If you use squidly in your work please cite our preprint: https://www.biorxiv.org/content/10.1101/2025.06.13.659624v1
 
