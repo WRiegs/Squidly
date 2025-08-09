@@ -27,25 +27,6 @@ Note if you get the below error:
 ```ValueError: numpy.dtype size changed, may indicate binary incompatibility. Expected 96 from C header, got 88 from PyObject```
  you may need to update numpy and pandas.
 
-### Installation Steps (manual)
-These steps will enable you to also develop and change things as you wish.
-```bash
-# Clone the repository
-git clone https://github.com/WRiegs/Squidly
-cd Squidly
-# Install dependencies
-./install.sh # Makes the squidly conda env
-conda activate squidly
-# install diamond for BLAST
-conda install -c bioconda -c conda-forge diamond
-
-# Build and install
-python setup.py sdist bdist_wheel
-pip install dist/squidly-0.0.2.tar.gz 
-```
-
-Torch with cuda 11.8+ must be installed.
-https://pytorch.org/get-started/locally/
 
 ## Usage
 For example to run the 3B model with a fasta file (in squidly only mode)
