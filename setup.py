@@ -39,9 +39,9 @@ setup(name='squidly',
       ],
       keywords=['gene-annotation', 'bioinformatics', 'catalytic-site-prediction'],
       packages=['squidly'],
-    include_package_data=True,
+      include_package_data=True,
       package_data={
-          'squidly': ['install/install.sh'],
+          'squidly': ['install.sh'],
       },
       entry_points={
           'console_scripts': [
@@ -49,7 +49,8 @@ setup(name='squidly',
 
           ]
       },
-      install_requires=['pandas', 'numpy', 'fair-esm', 'sciutil>=1.0.3', 'typer', 'psutil', 'biopython', 'sciutil', 'tqdm'],
+      install_requires=['pandas>=2.1.4', 'numpy>=1.22.4', 'fair-esm', 'sciutil>=1.0.3', 'typer', 'psutil', 'biopython',
+                        'sciutil', 'tqdm', 'enzymetk', 'huggingface_hub'],
       python_requires='>=3.10',
       data_files=[("", ["LICENSE"])]
       )

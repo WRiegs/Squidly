@@ -13,8 +13,22 @@ Squidly is dependant on the ESM2 3B or 15B protein language model. Running Suidl
 The Smaller 3B model is lighter, runs faster and requires less VRAM. 
 
 Currently we expect GPU access but if you require a CPU only version please let us know and we can update this!
+### Simple installation
+```
+conda create --name squidly python=3.10
+conda activate squidly
+pip install squidly
+squidly install
+```
+Running `squidly install` should automatically download all models from huggingface. Now you can run squidly (see **Usage** below).
 
-### Installation Steps
+Note if you get the below error:
+
+```ValueError: numpy.dtype size changed, may indicate binary incompatibility. Expected 96 from C header, got 88 from PyObject```
+ you may need to update numpy and pandas.
+
+### Installation Steps (manual)
+These steps will enable you to also develop and change things as you wish.
 ```bash
 # Clone the repository
 git clone https://github.com/WRiegs/Squidly

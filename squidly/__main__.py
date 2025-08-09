@@ -207,7 +207,8 @@ def install():
     u.dp(['If this fails please see the github and follow the installation instructions.'])
 
     pckage_dir = dirname(__file__)
-    os.system(f'source {pckage_dir}/install.sh')
+    os.system(f'{pckage_dir}/./install.sh')
+    os.system(f'python {pckage_dir}/download_models_hf.py')
         
 @app.command()
 def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta (note have simple IDs otherwise we'll remove all funky characters.)")],
@@ -236,12 +237,12 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
         u.err_p(['ERROR: your ESM model must be one of', 'esm2_t36_3B_UR50D', 'esm2_t48_15B_UR50D']) 
         return
     if esm2_model == 'esm2_t36_3B_UR50D':
-        esm2_model_dir = '3B'
+        esm2_model_dir = f'3B'
     elif esm2_model == 'esm2_t48_15B_UR50D':
-        esm2_model_dir = '15B'
+        esm2_model_dir = f'15B'
     if ensemble and not os.path.exists(model_folder):
-            u.err_p(['ERROR: The model folder does not exist:', model_folder, ". You might need to download it from huggingface. Ensure it is placed in the correct location."])
-            return
+        u.err_p(['ERROR: The model folder does not exist:', model_folder, ". You might need to download it from huggingface. Ensure it is placed in the correct location."])
+        return
     output_folder = output_folder if output_folder != 'Current Directory' else os.getcwd()
     query_rows = []
     # Clean fasta file
@@ -283,8 +284,10 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
                 entries_found.append(entry)
         # Now we can filter the query DF.
         # Re-create
+        print(set(entries_found))
         query_df = pd.DataFrame(query_rows, columns=['id', 'seq'])    
         remaining_df = query_df[~query_df['id'].isin(entries_found)]
+
         # Now resave as as fasta file
         with open(os.path.join(output_folder, f'{run_name}_input_fasta.fasta'), 'w+') as fout:
             records = list(SeqIO.parse(fasta_file, "fasta"))
@@ -293,7 +296,12 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
         fasta_file = os.path.join(output_folder, f'{run_name}_input_fasta.fasta')
         # Now run squidly 
         u.warn_p(["Running Squidly on the following number of seqs: ", len(remaining_df)])
+        if len(remaining_df) < 1:
+            u.warn_p(['All sequences had a residue found with BLAST. Saving and returning.\n', 
+                      'Data saved to:', os.path.join(output_folder, f'{run_name}_blast.csv')])
+            blast_df.to_csv(os.path.join(output_folder, f'{run_name}_blast.csv'), index=False)
 
+            return
     elif cr_model_as != '' and lstm_model_as != '':
         u.warn_p(["Running with user supplied squidly models:  ", cr_model_as, lstm_model_as])
     else:
@@ -305,12 +313,15 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
             cr_model_as = os.path.join(model_folder, 'Squidly_CL_15B.pt')
     if ensemble:
         u.warn_p(["Running ensemble"])
+        print(os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_CR_1.pt'))
+        print(model_folder)
+        print(f'{model_folder}CataloDB_{esm2_model_dir}_CR_1.pt')
         models = [
-            [os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_CR_1.pt'), os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_LSTM_1.pth')],
-            [os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_CR_2.pt'), os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_LSTM_2.pth')],
-            [os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_CR_3.pt'), os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_LSTM_3.pth')],
-            [os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_CR_4.pt'), os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_LSTM_4.pth')],
-            [os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_CR_5.pt'), os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_LSTM_5.pth')]]
+            [os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_CR_1.pt'), os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_LSTM_1.pth')],
+            [os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_CR_2.pt'), os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_LSTM_2.pth')],
+            [os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_CR_3.pt'), os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_LSTM_3.pth')],
+            [os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_CR_4.pt'), os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_LSTM_4.pth')],
+            [os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_CR_5.pt'), os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_LSTM_5.pth')]]
     else:
         models = [[cr_model_as, lstm_model_as]]
         u.warn_p(["Running single model"])
