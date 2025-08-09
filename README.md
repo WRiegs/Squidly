@@ -1,4 +1,4 @@
-# Squidly ![Squid](squidly.png)
+# Squidly ![Squid](squid.png)
 
 ![Overview Figure](overview_fig_.png)
 
