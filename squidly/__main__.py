@@ -144,28 +144,22 @@ def run_blast(query_df, database_df, output_folder, run_name, id_col='id', seq_c
       
                     
                     
-def compute_uncertainties(df, prob_columns, mean_prob=0.8):
-    means, aleatorics, epistemics, residues  = [], [], [], []
+def compute_uncertainties(df, prob_columns, mean_prob=0.5):
+    means, aleatorics, epistemics, residues, variance  = [], [], [], [], []
     for p1, p2, p3, p4, p5 in tqdm(df[prob_columns].values):
         mean_values = []
         aleatoric_values = []
         epistemic_values = []
+        variance_values = []
         indicies = []
         for j in range(0, len(p1)):
-        
             # Aleatoric: average predicted entropy
             eps = 1e-8  # for numerical stability
             # For each value we want the mean and the variance and the uncertainty
-            all_probs = np.array([p1[j] , p2[j], p3[j], p4[j], p5[j]])
-            mean_probs = np.mean(all_probs) # (N, 10)
-            var_probs = np.var(all_probs)    # epistemic uncertainty (variance across models)
-
-            entropies = -np.sum(all_probs * np.log(all_probs + eps))  # (num_models, N)
-            aleatoric = np.mean(entropies)   # (N,)
-
-            # Epistemic: entropy of mean prediction minus mean entropy
-            mean_entropy = -np.sum(mean_probs * np.log(mean_probs + eps))  # (N,)
-            epistemic = mean_entropy - aleatoric  # (N,)
+            all_probs = [p1[j] + eps, p2[j] + eps, p3[j] + eps, p4[j] + eps, p5[j] + eps]
+            mean_probs = np.mean(all_probs)
+            aleatoric = -(mean_probs * np.log(mean_probs + eps) + (1 - mean_probs) * np.log(1 - mean_probs + eps))
+            epistemic = np.var(all_probs) # epistemic ~ variance across preds
             if mean_probs > mean_prob:
                 indicies.append(j)
                 mean_values.append(mean_probs)
@@ -175,7 +169,8 @@ def compute_uncertainties(df, prob_columns, mean_prob=0.8):
         aleatorics.append(aleatoric_values) 
         epistemics.append(epistemic_values)
         residues.append('|'.join([str(s) for s in indicies]))
-    return means, aleatorics, epistemics, residues, var_probs
+    return means, aleatorics, epistemics, residues
+
 
 
 def combine_squidly_blast(query_df, squidly_df, blast_df):
@@ -377,11 +372,10 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
 
             squidly_ensemble = squidly_ensemble.join(squidly_df, how='outer', rsuffix=f'_{model_i}')
 
-    means, aleatorics, epistemics, residues, variance = compute_uncertainties(squidly_ensemble, ['all_AS_probs', 'all_AS_probs_1', 'all_AS_probs_2', 'all_AS_probs_3', 'all_AS_probs_4'], mean_prob)
+    means, aleatorics, epistemics, residues = compute_uncertainties(squidly_ensemble, ['all_AS_probs', 'all_AS_probs_1', 'all_AS_probs_2', 'all_AS_probs_3', 'all_AS_probs_4'], mean_prob)
     squidly_ensemble['mean'] = means
     squidly_ensemble['aleatoric'] = aleatorics
-    squidly_ensemble['variance'] = variance
-    squidly_ensemble['epistemic'] = epistemics
+    squidly_ensemble['variance'] = epistemics
 
     squidly_ensemble['Squidly_Ensemble_Residues'] = residues
     squidly_ensemble.set_index('label', inplace=True)
