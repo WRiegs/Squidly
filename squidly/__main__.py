@@ -141,35 +141,32 @@ def run_blast(query_df, database_df, output_folder, run_name, id_col='id', seq_c
         
     # Now we can align to the sequneces
     return align_blast_to_seq(test_df, database_df, output_folder)        
-      
-                    
+          
                     
 def compute_uncertainties(df, prob_columns, mean_prob=0.5):
-    means, aleatorics, epistemics, residues, variance  = [], [], [], [], []
+    means, variances, residues, entropy_values  = [], [], [], []
     for p1, p2, p3, p4, p5 in tqdm(df[prob_columns].values):
         mean_values = []
-        aleatoric_values = []
-        epistemic_values = []
         variance_values = []
+        entropys = []
         indicies = []
         for j in range(0, len(p1)):
-            # Aleatoric: average predicted entropy
-            eps = 1e-8  # for numerical stability
-            # For each value we want the mean and the variance and the uncertainty
+            eps = 1e-8 # For non-zeros
             all_probs = [p1[j] + eps, p2[j] + eps, p3[j] + eps, p4[j] + eps, p5[j] + eps]
             mean_probs = np.mean(all_probs)
-            aleatoric = -(mean_probs * np.log(mean_probs + eps) + (1 - mean_probs) * np.log(1 - mean_probs + eps))
-            epistemic = np.var(all_probs) # epistemic ~ variance across preds
+            entropy = -((mean_probs * np.log2(mean_probs)) + ((1 - mean_probs) * np.log2(1 - mean_probs)))
+            epistemic = np.var(all_probs) # use variance as a proxy
             if mean_probs > mean_prob:
                 indicies.append(j)
-                mean_values.append(mean_probs)
-                aleatoric_values.append(aleatoric)
-                epistemic_values.append(epistemic)
+            mean_values.append(mean_probs)
+            variance_values.append(epistemic)
+            entropys.append(entropy)
         means.append(mean_values)
-        aleatorics.append(aleatoric_values) 
-        epistemics.append(epistemic_values)
+        variances.append(variance_values)
+        entropy_values.append(entropys)
+        
         residues.append('|'.join([str(s) for s in indicies]))
-    return means, aleatorics, epistemics, residues
+    return means, entropy_values, variances, residues
 
 
 
@@ -297,8 +294,9 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
             blast_df.to_csv(os.path.join(output_folder, f'{run_name}_blast.csv'), index=False)
 
             return
-    elif cr_model_as != '' and lstm_model_as != '':
+    if cr_model_as != '' and lstm_model_as != '':
         u.warn_p(["Running with user supplied squidly models:  ", cr_model_as, lstm_model_as])
+        models = [[cr_model_as, lstm_model_as]]
     else:
         if esm2_model == '3B':
             lstm_model_as = os.path.join(model_folder, 'Squidly_LSTM_3B.pth')
@@ -306,20 +304,20 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
         elif esm2_model == '15B':
             lstm_model_as = os.path.join(model_folder, 'Squidly_LSTM_15B.pth')
             cr_model_as = os.path.join(model_folder, 'Squidly_CL_15B.pt')
-    if ensemble:
-        u.warn_p(["Running ensemble"])
-        print(os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_CR_1.pt'))
-        print(model_folder)
-        print(f'{model_folder}CataloDB_{esm2_model_dir}_CR_1.pt')
-        models = [
-            [os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_CR_1.pt'), os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_LSTM_1.pth')],
-            [os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_CR_2.pt'), os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_LSTM_2.pth')],
-            [os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_CR_3.pt'), os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_LSTM_3.pth')],
-            [os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_CR_4.pt'), os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_LSTM_4.pth')],
-            [os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_CR_5.pt'), os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_LSTM_5.pth')]]
-    else:
-        models = [[cr_model_as, lstm_model_as]]
-        u.warn_p(["Running single model"])
+        if ensemble:
+            u.warn_p(["Running ensemble"])
+            print(os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_CR_1.pt'))
+            print(model_folder)
+            print(f'{model_folder}CataloDB_{esm2_model_dir}_CR_1.pt')
+            models = [
+                [os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_CR_1.pt'), os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_LSTM_1.pth')],
+                [os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_CR_2.pt'), os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_LSTM_2.pth')],
+                [os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_CR_3.pt'), os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_LSTM_3.pth')],
+                [os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_CR_4.pt'), os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_LSTM_4.pth')],
+                [os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_CR_5.pt'), os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_LSTM_5.pth')]]
+        else:
+            models = [[cr_model_as, lstm_model_as]]
+            u.warn_p(["Running single model"])
     squidly_ensemble = pd.DataFrame()
     for model_i, model in enumerate(models):
         cr_model_as, lstm_model_as = model
@@ -357,6 +355,12 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
             squidly_df = df
             squidly_df.to_csv(os.path.join(output_folder, f'{input_filename}_squidly_{model_i}.csv'), index=False)
             squidly_ensemble = squidly_ensemble.join(squidly_df, how='outer', rsuffix=f'_{model_i}')
+            means, entropy_values, epistemics, residues = compute_uncertainties(squidly_ensemble, ['all_AS_probs', 'all_AS_probs_1', 'all_AS_probs_2', 'all_AS_probs_3', 'all_AS_probs_4'], mean_prob)
+            squidly_ensemble['mean'] = means
+            squidly_ensemble['entropy'] = entropy_values
+            squidly_ensemble['variance'] = epistemics
+            squidly_ensemble['Squidly_Ensemble_Residues'] = residues
+            squidly_ensemble.set_index('label', inplace=True)
         else:
             cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), fasta_file, esm2_model, cr_model_as, lstm_model_as, output_folder, '--toks_per_batch', 
             str(toks_per_batch), '--AS_threshold',  str(as_threshold)]
@@ -372,14 +376,6 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
 
             squidly_ensemble = squidly_ensemble.join(squidly_df, how='outer', rsuffix=f'_{model_i}')
 
-    means, aleatorics, epistemics, residues = compute_uncertainties(squidly_ensemble, ['all_AS_probs', 'all_AS_probs_1', 'all_AS_probs_2', 'all_AS_probs_3', 'all_AS_probs_4'], mean_prob)
-    squidly_ensemble['mean'] = means
-    squidly_ensemble['aleatoric'] = aleatorics
-    squidly_ensemble['variance'] = epistemics
-
-    squidly_ensemble['Squidly_Ensemble_Residues'] = residues
-    squidly_ensemble.set_index('label', inplace=True)
-    
     ensemble = combine_squidly_blast(query_df, squidly_df, blast_df)
     blast_df.to_csv(os.path.join(output_folder, f'{run_name}_blast.csv'), index=False)
     squidly_ensemble.to_pickle(os.path.join(output_folder, f'{run_name}_squidly.pkl'))
