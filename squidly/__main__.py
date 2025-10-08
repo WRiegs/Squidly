@@ -143,7 +143,7 @@ def run_blast(query_df, database_df, output_folder, run_name, id_col='id', seq_c
     return align_blast_to_seq(test_df, database_df, output_folder)        
           
                     
-def compute_uncertainties(df, prob_columns, mean_prob=0.5):
+def compute_uncertainties(df, prob_columns, mean_prob=0.5, mean_var=1):
     means, variances, residues, entropy_values  = [], [], [], []
     for p1, p2, p3, p4, p5 in tqdm(df[prob_columns].values):
         mean_values = []
@@ -155,11 +155,11 @@ def compute_uncertainties(df, prob_columns, mean_prob=0.5):
             all_probs = [p1[j] + eps, p2[j] + eps, p3[j] + eps, p4[j] + eps, p5[j] + eps]
             mean_probs = np.mean(all_probs)
             entropy = -((mean_probs * np.log2(mean_probs)) + ((1 - mean_probs) * np.log2(1 - mean_probs)))
-            epistemic = np.var(all_probs) # use variance as a proxy
-            if mean_probs > mean_prob:
+            vars = np.var(all_probs) # use variance as a proxy
+            if mean_probs > mean_prob and vars < mean_var: # Use the supplied cutoffs
                 indicies.append(j)
             mean_values.append(mean_probs)
-            variance_values.append(epistemic)
+            variance_values.append(vars)
             entropys.append(entropy)
         means.append(mean_values)
         variances.append(variance_values)
@@ -216,7 +216,10 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
         as_threshold: Annotated[float, typer.Option(help="Whether or not to keep multiple predicted values if False only the top result is retained.")] = 0.99,
         blast_threshold: Annotated[float, typer.Option(help="Sequence identity with which to use Squidly over BLAST defualt 0.3 (meaning for seqs with < 0.3 identity in the DB use Squidly).")] = 0.3,
         chunk: Annotated[int, typer.Option(help="Max chunk size for the dataset.")] = 0, 
-        mean_prob: Annotated[float, typer.Option(help="Mean probability threshold for the dataset.")] = 0.8):
+        mean_prob: Annotated[float, typer.Option(help="Mean prediction threshold for the dataset.")] = 0.6, 
+        mean_var: Annotated[float, typer.Option(help="Mean variance threshold for the dataset.")] = 0.225, 
+
+        ):
 
     """ 
     Find catalytic residues using Squidly and BLAST.
@@ -355,7 +358,7 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
             squidly_df = df
             squidly_df.to_csv(os.path.join(output_folder, f'{input_filename}_squidly_{model_i}.csv'), index=False)
             squidly_ensemble = squidly_ensemble.join(squidly_df, how='outer', rsuffix=f'_{model_i}')
-            means, entropy_values, epistemics, residues = compute_uncertainties(squidly_ensemble, ['all_AS_probs', 'all_AS_probs_1', 'all_AS_probs_2', 'all_AS_probs_3', 'all_AS_probs_4'], mean_prob)
+            means, entropy_values, epistemics, residues = compute_uncertainties(squidly_ensemble, ['all_AS_probs', 'all_AS_probs_1', 'all_AS_probs_2', 'all_AS_probs_3', 'all_AS_probs_4'], mean_prob, mean_var)
             squidly_ensemble['mean'] = means
             squidly_ensemble['entropy'] = entropy_values
             squidly_ensemble['variance'] = epistemics
