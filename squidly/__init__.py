@@ -18,7 +18,7 @@
 __title__ = 'squidly'
 __description__ = 'Catalytic residue prediction'
 __url__ = 'https://github.com/WRiegs/Squidly'
-__version__ = '0.0.5'
+__version__ = '0.0.6'
 __author__ = 'William Rieger, Ariane Mora'
 __author_email__ = 'willsemail'
 __license__ = 'GPL3'
