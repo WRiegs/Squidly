@@ -367,16 +367,8 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
             squidly_df = df
             squidly_df.to_csv(os.path.join(output_folder, f'{input_filename}_squidly_{model_i}.csv'), index=False)
             squidly_ensemble = squidly_ensemble.join(squidly_df, how='outer', rsuffix=f'_{model_i}')
-            # Add in the sequence
-            entry_to_seq = dict(zip(query_df.id, query_df.seq))
-            squidly_ensemble['Sequence'] = [entry_to_seq.get(e) for e in squidly_ensemble.label.values]
-            means, entropy_values, epistemics, residues = compute_uncertainties(squidly_ensemble, ['all_AS_probs', 'all_AS_probs_1', 'all_AS_probs_2', 'all_AS_probs_3', 'all_AS_probs_4'], 'Sequence', mean_prob, mean_var)
-            squidly_ensemble['mean'] = means
-            squidly_ensemble['entropy'] = entropy_values
-            squidly_ensemble['variance'] = epistemics
-            squidly_ensemble['Squidly_Ensemble_Residues'] = residues
-            squidly_ensemble.set_index('label', inplace=True)
         else:
+            fasta_file = os.path.join(output_folder, f'{run_name}_input_fasta.fasta')
             cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), fasta_file, esm2_model, cr_model_as, lstm_model_as, output_folder, '--toks_per_batch', 
             str(toks_per_batch), '--AS_threshold',  str(as_threshold)]
             print(cmd)
@@ -390,7 +382,20 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
             squidly_df.to_pickle(os.path.join(output_folder, f'{input_filename}_squidly_{model_i}.pkl'))
 
             squidly_ensemble = squidly_ensemble.join(squidly_df, how='outer', rsuffix=f'_{model_i}')
-
+    if ensemble:
+            entry_to_seq = dict(zip(query_df.id, query_df.seq))
+            squidly_ensemble['Sequence'] = [entry_to_seq.get(e) for e in squidly_ensemble.label.values]
+            means, entropy_values, epistemics, residues = compute_uncertainties(squidly_ensemble, ['all_AS_probs', 'all_AS_probs_1', 'all_AS_probs_2', 'all_AS_probs_3', 'all_AS_probs_4'], 'Sequence', mean_prob, mean_var)
+            squidly_ensemble['mean'] = means
+            squidly_ensemble['entropy'] = entropy_values
+            squidly_ensemble['variance'] = epistemics
+            squidly_ensemble['Squidly_Ensemble_Residues'] = residues
+            squidly_ensemble.set_index('label', inplace=True)
+            squidly_ensemble.to_csv(os.path.join(output_folder, f'{run_name}_squidly_ensemble.csv'))
+            squidly_df = squidly_ensemble
+            squidly_df['label'] = squidly_df.index
+            squidly_df['Squidly_CR_Position'] = residues
+            
     ensemble = combine_squidly_blast(query_df, squidly_df, blast_df)
     blast_df.to_csv(os.path.join(output_folder, f'{run_name}_blast.csv'), index=False)
     squidly_ensemble.to_pickle(os.path.join(output_folder, f'{run_name}_squidly.pkl'))
