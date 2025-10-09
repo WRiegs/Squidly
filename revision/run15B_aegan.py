@@ -1,7 +1,7 @@
 import pandas as pd
 import os 
 
-data_dir = '/disk1/ariane/vscode/squidly/manuscript/AEGAN_extracted_sequences/'
+data_dir = 'data/AEGAN_extracted_sequences/'
 
 files = ['PC',
          'NN',
