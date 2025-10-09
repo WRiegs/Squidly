@@ -4,12 +4,12 @@ import os
 data_dir = '/disk1/ariane/vscode/squidly/manuscript/AEGAN_extracted_sequences/'
 
 files = [
-    # 'PC',
-    #      'NN',
-    #      'EF_superfamily',
-    #      'EF_fold',
-    #      'family_specific',
-    #      'EF_family',
+        'PC',
+         'NN',
+         'EF_superfamily',
+         'EF_fold',
+         'family_specific',
+         'EF_family',
          'HA_superfamily'] 
 
 
