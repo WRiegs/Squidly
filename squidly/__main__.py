@@ -143,32 +143,39 @@ def run_blast(query_df, database_df, output_folder, run_name, id_col='id', seq_c
     return align_blast_to_seq(test_df, database_df, output_folder)        
           
                     
-def compute_uncertainties(df, prob_columns, mean_prob=0.5, mean_var=1):
+def compute_uncertainties(df, prob_columns, seq_col, mean_prob=0.5, mean_var=1):
     means, variances, residues, entropy_values  = [], [], [], []
-    for p1, p2, p3, p4, p5 in tqdm(df[prob_columns].values):
+    for p1, p2, p3, p4, p5, seq in tqdm(df[prob_columns + [seq_col]].values):
         mean_values = []
         variance_values = []
         entropys = []
         indicies = []
-        for j in range(0, len(p1)):
-            eps = 1e-8 # For non-zeros
-            all_probs = [p1[j] + eps, p2[j] + eps, p3[j] + eps, p4[j] + eps, p5[j] + eps]
-            mean_probs = np.mean(all_probs)
-            entropy = -((mean_probs * np.log2(mean_probs)) + ((1 - mean_probs) * np.log2(1 - mean_probs)))
-            vars = np.var(all_probs) # use variance as a proxy
-            if mean_probs > mean_prob and vars < mean_var: # Use the supplied cutoffs
-                indicies.append(j)
-            mean_values.append(mean_probs)
-            variance_values.append(vars)
-            entropys.append(entropy)
+        for j in range(0, len(seq)):
+            try:
+                if j > len(p1): # only go to 1024 - a limitation atm
+                    mean_probs = 0
+                    entropy = 1
+                    vars = 1 # Highlight these are incorrect
+                else:
+                    eps = 1e-8 # For non-zeros
+                    all_probs = [p1[j] + eps, p2[j] + eps, p3[j] + eps, p4[j] + eps, p5[j] + eps]
+                    mean_probs = np.mean(all_probs)
+                    entropy = -((mean_probs * np.log2(mean_probs)) + ((1 - mean_probs) * np.log2(1 - mean_probs)))
+                    vars = np.var(all_probs) # use variance as a proxy
+                    if mean_probs > mean_prob and vars < mean_var: # Use the supplied cutoffs
+                        indicies.append(j)
+                mean_values.append(mean_probs)
+                variance_values.append(vars)
+                entropys.append(entropy)
+            except:
+                mean_values.append(0)
+                variance_values.append(1)
+                entropys.append(1)
         means.append(mean_values)
         variances.append(variance_values)
         entropy_values.append(entropys)
-        
         residues.append('|'.join([str(s) for s in indicies]))
     return means, entropy_values, variances, residues
-
-
 
 def combine_squidly_blast(query_df, squidly_df, blast_df):
     # Take from squidly and BLAST
@@ -218,7 +225,7 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
         chunk: Annotated[int, typer.Option(help="Max chunk size for the dataset.")] = 0, 
         mean_prob: Annotated[float, typer.Option(help="Mean prediction threshold for the dataset.")] = 0.6, 
         mean_var: Annotated[float, typer.Option(help="Mean variance threshold for the dataset.")] = 0.225, 
-
+        filter_blast: Annotated[bool, typer.Option(help="Only run on the ones that didn't have a BLAST residue.")] = True,
         ):
 
     """ 
@@ -281,22 +288,24 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
         # Re-create
         print(set(entries_found))
         query_df = pd.DataFrame(query_rows, columns=['id', 'seq'])    
-        remaining_df = query_df[~query_df['id'].isin(entries_found)]
+        remaining_df = query_df
+        if filter_blast:
+            remaining_df = query_df[~query_df['id'].isin(entries_found)]
 
-        # Now resave as as fasta file
-        with open(os.path.join(output_folder, f'{run_name}_input_fasta.fasta'), 'w+') as fout:
-            records = list(SeqIO.parse(fasta_file, "fasta"))
-            for seq_id, seq in remaining_df[['id', 'seq']].values:
-                fout.write(f">{seq_id}\n{seq}\n")
-        fasta_file = os.path.join(output_folder, f'{run_name}_input_fasta.fasta')
-        # Now run squidly 
-        u.warn_p(["Running Squidly on the following number of seqs: ", len(remaining_df)])
-        if len(remaining_df) < 1:
-            u.warn_p(['All sequences had a residue found with BLAST. Saving and returning.\n', 
-                      'Data saved to:', os.path.join(output_folder, f'{run_name}_blast.csv')])
-            blast_df.to_csv(os.path.join(output_folder, f'{run_name}_blast.csv'), index=False)
-
-            return
+            # Now resave as as fasta file
+            with open(os.path.join(output_folder, f'{run_name}_input_fasta.fasta'), 'w+') as fout:
+                records = list(SeqIO.parse(fasta_file, "fasta"))
+                for seq_id, seq in remaining_df[['id', 'seq']].values:
+                    fout.write(f">{seq_id}\n{seq}\n")
+            fasta_file = os.path.join(output_folder, f'{run_name}_input_fasta.fasta')
+            # Now run squidly 
+            u.warn_p(["Running Squidly on the following number of seqs: ", len(remaining_df)])
+            if len(remaining_df) < 1:
+                u.warn_p(['All sequences had a residue found with BLAST. Saving and returning.\n', 
+                        'Data saved to:', os.path.join(output_folder, f'{run_name}_blast.csv')])
+                blast_df.to_csv(os.path.join(output_folder, f'{run_name}_blast.csv'), index=False)
+                return
+        
     if cr_model_as != '' and lstm_model_as != '':
         u.warn_p(["Running with user supplied squidly models:  ", cr_model_as, lstm_model_as])
         models = [[cr_model_as, lstm_model_as]]
@@ -358,7 +367,10 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
             squidly_df = df
             squidly_df.to_csv(os.path.join(output_folder, f'{input_filename}_squidly_{model_i}.csv'), index=False)
             squidly_ensemble = squidly_ensemble.join(squidly_df, how='outer', rsuffix=f'_{model_i}')
-            means, entropy_values, epistemics, residues = compute_uncertainties(squidly_ensemble, ['all_AS_probs', 'all_AS_probs_1', 'all_AS_probs_2', 'all_AS_probs_3', 'all_AS_probs_4'], mean_prob, mean_var)
+            # Add in the sequence
+            entry_to_seq = dict(zip(query_df.id, query_df.seq))
+            squidly_ensemble['Sequence'] = [entry_to_seq.get(e) for e in squidly_ensemble.label.values]
+            means, entropy_values, epistemics, residues = compute_uncertainties(squidly_ensemble, ['all_AS_probs', 'all_AS_probs_1', 'all_AS_probs_2', 'all_AS_probs_3', 'all_AS_probs_4'], 'Sequence', mean_prob, mean_var)
             squidly_ensemble['mean'] = means
             squidly_ensemble['entropy'] = entropy_values
             squidly_ensemble['variance'] = epistemics
@@ -382,8 +394,9 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
     ensemble = combine_squidly_blast(query_df, squidly_df, blast_df)
     blast_df.to_csv(os.path.join(output_folder, f'{run_name}_blast.csv'), index=False)
     squidly_ensemble.to_pickle(os.path.join(output_folder, f'{run_name}_squidly.pkl'))
-    ensemble.to_csv(os.path.join(output_folder, f'{run_name}_ensemble.csv'), index=False)
+    squidly_ensemble[[c for c in squidly_ensemble if c not in ['all_AS_probs', 'all_AS_probs_1', 'all_AS_probs_2', 'all_AS_probs_3', 'all_AS_probs_4', 'mean', 'entropy', 'variance']]].to_csv(os.path.join(output_folder, f'{run_name}_squidly.csv')) # Keep both so users can read it easily 
 
+    ensemble.to_csv(os.path.join(output_folder, f'{run_name}_ensemble.csv'), index=False)
     
 if __name__ == "__main__":
     app()
