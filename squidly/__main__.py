@@ -16,7 +16,7 @@
 ###############################################################################
 
 """
-Author: Ariane Mora
+Author: Ariane Mora, Will Rieger
 Date: September 2024
 """
 import re
@@ -48,14 +48,7 @@ import pandas as pd
 u = SciUtil()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-
-
 app = typer.Typer()
-
-
-
-u = SciUtil()
-
 
 def align_blast_to_seq(df, database, output_folder) -> pd.DataFrame:
     """ 
@@ -90,7 +83,6 @@ def align_blast_to_seq(df, database, output_folder) -> pd.DataFrame:
                         active_pred.append(query_count)
                     if query_seq[i] != v:
                         x += 1
-                        #print(query, uniprot, v, query_seq[i])
                 if v != '-':
                     position_count += 1
                 if query_seq[i] != '-' and query_seq[i] != ' ':
@@ -141,41 +133,16 @@ def run_blast(query_df, database_df, output_folder, run_name, id_col='id', seq_c
         
     # Now we can align to the sequneces
     return align_blast_to_seq(test_df, database_df, output_folder)        
-          
-                    
-def compute_uncertainties(df, prob_columns, seq_col, mean_prob=0.5, mean_var=1):
-    means, variances, residues, entropy_values  = [], [], [], []
-    for p1, p2, p3, p4, p5, seq in tqdm(df[prob_columns + [seq_col]].values):
-        mean_values = []
-        variance_values = []
-        entropys = []
-        indicies = []
-        for j in range(0, len(seq)):
-            try:
-                if j > len(p1): # only go to 1024 - a limitation atm
-                    mean_probs = 0
-                    entropy = 1
-                    vars = 1 # Highlight these are incorrect
-                else:
-                    eps = 1e-8 # For non-zeros
-                    all_probs = [p1[j] + eps, p2[j] + eps, p3[j] + eps, p4[j] + eps, p5[j] + eps]
-                    mean_probs = np.mean(all_probs)
-                    entropy = -((mean_probs * np.log2(mean_probs)) + ((1 - mean_probs) * np.log2(1 - mean_probs)))
-                    vars = np.var(all_probs) # use variance as a proxy
-                    if mean_probs > mean_prob and vars < mean_var: # Use the supplied cutoffs
-                        indicies.append(j)
-                mean_values.append(mean_probs)
-                variance_values.append(vars)
-                entropys.append(entropy)
-            except:
-                mean_values.append(0)
-                variance_values.append(1)
-                entropys.append(1)
-        means.append(mean_values)
-        variances.append(variance_values)
-        entropy_values.append(entropys)
-        residues.append('|'.join([str(s) for s in indicies]))
-    return means, entropy_values, variances, residues
+
+
+def run_subprocess(cmd: list):
+        """ Run a command """   
+        result = None
+        start = timeit.default_timer()
+        result = subprocess.run(cmd, text=True)       
+        u.dp(['Time for command to run (min): ', (timeit.default_timer() - start)/60])
+        return result
+
 
 def combine_squidly_blast(query_df, squidly_df, blast_df):
     # Take from squidly and BLAST
@@ -214,17 +181,16 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
         esm2_model: Annotated[str, typer.Argument(help="Name of the esm2_model, esm2_t36_3B_UR50D or esm2_t48_15B_UR50D")], 
         output_folder: Annotated[str, typer.Argument(help="Where to store results (full path!)")] = 'Current Directory', 
         run_name: Annotated[str, typer.Argument(help="Name of the run")] = 'squidly', 
-        ensemble: Annotated[bool, typer.Option(help="Whether or not to do the ensemble.")] = True,
+        single_model: Annotated[bool, typer.Option(help="Whether or not to use single model instead of the ensemble. We recommend the ensemble. It is faster than the single model version.")] = False,
         model_folder: Annotated[str, typer.Option(help="Full path to the model folder.")] = '',
         database:  Annotated[str, typer.Option(help="Full path to database csv (if you want to do the ensemble), needs 3 columns: 'Entry', 'Sequence', 'Residue' where residue is a | separated list of residues. See default DB provided by Squidly.")] = 'None',
-        cr_model_as: Annotated[str, typer.Option(help="Optional: Model for the catalytic residue prediction i.e. not using the default with the package. Ensure it matches the esmmodel.")] = '', 
-        lstm_model_as: Annotated[str, typer.Option(help="Optional: LSTM model path for the catalytic residue prediction i.e. not using the default with the package. Ensure it matches the esmmodel.")] = '', 
-        toks_per_batch: Annotated[int, typer.Option(help="Run method (filter or complete) i.e. filter = only annotates with the next tool those that couldn't be found.")] = 5, 
-        as_threshold: Annotated[float, typer.Option(help="Whether or not to keep multiple predicted values if False only the top result is retained.")] = 0.99,
+        cr_model_as: Annotated[str, typer.Option(help="Contrastive learning model for the catalytic residue prediction when not using the ensemble. Ensure it matches the esm model.")] = '', 
+        lstm_model_as: Annotated[str, typer.Option(help="LSTM model for the catalytic residue prediction when not using the ensemble. Ensure it matches the esm model.")] = '', 
+        as_threshold: Annotated[float, typer.Option(help="When using the single squidly models, you must specify a prediction threshold. We found >0.9 to work best in practice, depending on the model.")] = 0.95,
         blast_threshold: Annotated[float, typer.Option(help="Sequence identity with which to use Squidly over BLAST defualt 0.3 (meaning for seqs with < 0.3 identity in the DB use Squidly).")] = 0.3,
-        chunk: Annotated[int, typer.Option(help="Max chunk size for the dataset.")] = 0, 
-        mean_prob: Annotated[float, typer.Option(help="Mean prediction threshold for the dataset.")] = 0.6, 
-        mean_var: Annotated[float, typer.Option(help="Mean variance threshold for the dataset.")] = 0.225, 
+        chunk: Annotated[int, typer.Option(help="Max chunk size for the dataset. This is useful for when running Squidly on >50000 sequences as memory is storing intermediate results during inference.")] = 0, 
+        mean_prob: Annotated[float, typer.Option(help="Mean probability threshold used in the ensemble.")] = 0.6, 
+        mean_var: Annotated[float, typer.Option(help="Mean variance cutoff used in the ensemble.")] = 0.225, 
         filter_blast: Annotated[bool, typer.Option(help="Only run on the ones that didn't have a BLAST residue.")] = True,
         ):
 
@@ -242,7 +208,7 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
         esm2_model_dir = f'3B'
     elif esm2_model == 'esm2_t48_15B_UR50D':
         esm2_model_dir = f'15B'
-    if ensemble and not os.path.exists(model_folder):
+    if not single_model and not os.path.exists(model_folder):
         u.err_p(['ERROR: The model folder does not exist:', model_folder, ". You might need to download it from huggingface. Ensure it is placed in the correct location."])
         return
     output_folder = output_folder if output_folder != 'Current Directory' else os.getcwd()
@@ -253,7 +219,7 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
         records = list(SeqIO.parse(fasta_file, "fasta"))
         done_records = []
         # Remove all the ids
-        for record in tqdm(records):
+        for record in records:
             new_id = re.sub('[^0-9a-zA-Z]+', '', record.id)
             id_to_new_id[record.id] = new_id
             if new_id not in done_records:
@@ -306,33 +272,19 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
                 blast_df.to_csv(os.path.join(output_folder, f'{run_name}_blast.csv'), index=False)
                 return
         
-    if cr_model_as != '' and lstm_model_as != '':
-        u.warn_p(["Running with user supplied squidly models:  ", cr_model_as, lstm_model_as])
-        models = [[cr_model_as, lstm_model_as]]
-    else:
-        if esm2_model == '3B':
-            lstm_model_as = os.path.join(model_folder, 'Squidly_LSTM_3B.pth')
-            cr_model_as = os.path.join(model_folder, 'Squidly_CL_3B.pt')
-        elif esm2_model == '15B':
-            lstm_model_as = os.path.join(model_folder, 'Squidly_LSTM_15B.pth')
-            cr_model_as = os.path.join(model_folder, 'Squidly_CL_15B.pt')
-        if ensemble:
-            u.warn_p(["Running ensemble"])
-            print(os.path.join(model_folder, f'CataloDB_{esm2_model_dir}_CR_1.pt'))
-            print(model_folder)
-            print(f'{model_folder}CataloDB_{esm2_model_dir}_CR_1.pt')
-            models = [
-                [os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_CR_1.pt'), os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_LSTM_1.pth')],
-                [os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_CR_2.pt'), os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_LSTM_2.pth')],
-                [os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_CR_3.pt'), os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_LSTM_3.pth')],
-                [os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_CR_4.pt'), os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_LSTM_4.pth')],
-                [os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_CR_5.pt'), os.path.join(model_folder, esm2_model_dir, f'CataloDB_{esm2_model}_LSTM_5.pth')]]
-        else:
-            models = [[cr_model_as, lstm_model_as]]
-            u.warn_p(["Running single model"])
     squidly_ensemble = pd.DataFrame()
-    for model_i, model in enumerate(models):
-        cr_model_as, lstm_model_as = model
+
+
+    if esm2_model == '3B':
+        lstm_model_as = os.path.join(model_folder, 'Squidly_LSTM_3B.pth')
+        cr_model_as = os.path.join(model_folder, 'Squidly_CL_3B.pt')
+    elif esm2_model == '15B':
+        lstm_model_as = os.path.join(model_folder, 'Squidly_LSTM_15B.pth')
+        cr_model_as = os.path.join(model_folder, 'Squidly_CL_15B.pt')
+    if not single_model:
+        u.warn_p(["Running ensemble"])
+        print(model_folder)
+        # python squidly/squid_ensemble_async.py chai/sample.fasta esm2_t36_3B_UR50D aegan_ensemble_3B/ .
         if chunk != 0:
             u.dp(["Chunking"])
             output_filenames = []
@@ -341,20 +293,75 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
             for i in range(chunk, len(query_df) + chunk, chunk):
                 df_end = i
                 if df_end > len(query_df):
-                    df_end = len(query_df) - 1
+                    df_end = len(query_df)
                 tmp_df = query_df.iloc[prev_chunk:df_end]
                 df_list.append(tmp_df)
-                print(len(tmp_df))
                 prev_chunk = i 
             for i, df_chunk in tqdm(enumerate(df_list)):
                 chunk_fasta = os.path.join(output_folder, f'{run_name}_{i}_input_fasta.fasta')
                 with open(chunk_fasta, 'w+') as fout:
                     for seq_id, seq in df_chunk[['id', 'seq']].values:  # type: ignore 
                         fout.write(f">{seq_id}\n{seq}\n")
-                cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), chunk_fasta, esm2_model, cr_model_as, lstm_model_as, output_folder, '--toks_per_batch', 
-                str(toks_per_batch), '--AS_threshold',  str(as_threshold)]
+                cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), chunk_fasta, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder]
                 u.warn_p(["Running command:", ' '.join(cmd)])
-                subprocess.run(cmd, capture_output=True, text=True)
+                run_subprocess(cmd)
+                input_filename = chunk_fasta.split('/')[-1].split('.')[0]
+                output_filenames.append(os.path.join(output_folder, f'{input_filename}_squidly_ensemble.pkl'))
+            df = pd.DataFrame()
+            print(output_filenames)
+            for p in output_filenames:
+                sub_df = pd.read_pickle(p)
+                df = pd.concat([df, sub_df])
+            # Save to a consolidated file
+            input_filename = fasta_file.split('/')[-1].split('.')[0]
+            squidly_df = df
+            print(len(squidly_df))
+            squidly_ensemble = squidly_df
+            squidly_ensemble.to_pickle(os.path.join(output_folder, f'{run_name}_ensemble.pkl'))
+            squidly_ensemble['label'] = squidly_ensemble.index
+        else:
+            fasta_file = os.path.join(output_folder, f'{run_name}_input_fasta.fasta')
+            cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), fasta_file, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder]
+            u.warn_p(["Running non-chunked command:", ' '.join(cmd)])
+            # run using os.system so we can see the output
+            run_subprocess(cmd)
+            # Now combine the two and save all to the output folder
+            # get the input filename 
+            input_filename = fasta_file.split('/')[-1].split('.')[0]
+            squidly_df = pd.read_pickle(os.path.join(output_folder, f'{run_name}_ensemble.pkl'))
+            squidly_ensemble = squidly_df
+            # get the "label" column from index
+            squidly_ensemble['label'] = squidly_ensemble.index
+            squidly_ensemble.to_pickle(os.path.join(output_folder, f'{run_name}_ensemble.pkl'))
+    else:
+        u.warn_p(["Running single model"])
+        if cr_model_as != '' and lstm_model_as != '':
+            u.warn_p(["Running with user supplied squidly models:  ", cr_model_as, lstm_model_as])
+            models = [[cr_model_as, lstm_model_as]]
+        else:
+            u.err_p(["You must supply the catalytic residue and LSTM models if using single model mode."])
+            return
+        if chunk != 0:
+            u.dp(["Chunking"])
+            output_filenames = []
+            df_list = []
+            prev_chunk = 0
+            for i in range(chunk, len(query_df) + chunk, chunk):
+                df_end = i
+                if df_end > len(query_df):
+                    df_end = len(query_df)
+                tmp_df = query_df.iloc[prev_chunk:df_end]
+                df_list.append(tmp_df)
+                prev_chunk = i 
+            for i, df_chunk in tqdm(enumerate(df_list)):
+                chunk_fasta = os.path.join(output_folder, f'{run_name}_{i}_input_fasta.fasta')
+                with open(chunk_fasta, 'w+') as fout:
+                    for seq_id, seq in df_chunk[['id', 'seq']].values:  # type: ignore 
+                        fout.write(f">{seq_id}\n{seq}\n")
+                cmd = ['python', os.path.join(pckage_dir, 'squidly_single_model.py'), chunk_fasta, esm2_model, cr_model_as, lstm_model_as, output_folder, '--toks_per_batch', 
+                str(5), '--AS_threshold',  str(as_threshold)]
+                u.warn_p(["Running command:", ' '.join(cmd)])
+                run_subprocess(cmd)
                 input_filename = chunk_fasta.split('/')[-1].split('.')[0]
                 output_filenames.append(os.path.join(output_folder, f'{input_filename}_results.pkl'))
             df = pd.DataFrame()
@@ -369,39 +376,26 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
             squidly_ensemble = squidly_ensemble.join(squidly_df, how='outer', rsuffix=f'_{model_i}')
         else:
             fasta_file = os.path.join(output_folder, f'{run_name}_input_fasta.fasta')
-            cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), fasta_file, esm2_model, cr_model_as, lstm_model_as, output_folder, '--toks_per_batch', 
-            str(toks_per_batch), '--AS_threshold',  str(as_threshold)]
+            cmd = ['python', os.path.join(pckage_dir, 'squidly_single_model.py'), fasta_file, esm2_model, cr_model_as, lstm_model_as, output_folder, '--toks_per_batch', 
+            str(5), '--AS_threshold',  str(as_threshold)]
             print(cmd)
             u.warn_p(["Running non-batched command:", ' '.join(cmd)])
-            subprocess.run(cmd, capture_output=True, text=True)       
+            run_subprocess(cmd)
             # Now combine the two and save all to the output folder
             # get the input filename 
             input_filename = fasta_file.split('/')[-1].split('.')[0]
-        
             squidly_df = pd.read_pickle(os.path.join(output_folder, f'{input_filename}_results.pkl'))
-            squidly_df.to_pickle(os.path.join(output_folder, f'{input_filename}_squidly_{model_i}.pkl'))
-
-            squidly_ensemble = squidly_ensemble.join(squidly_df, how='outer', rsuffix=f'_{model_i}')
-    if ensemble:
+            squidly_df.to_pickle(os.path.join(output_folder, f'{run_name}_squidly_results.pkl'))
+            squidly_ensemble = squidly_df
+    if not single_model:
             entry_to_seq = dict(zip(query_df.id, query_df.seq))
             squidly_ensemble['Sequence'] = [entry_to_seq.get(e) for e in squidly_ensemble.label.values]
-            means, entropy_values, epistemics, residues = compute_uncertainties(squidly_ensemble, ['all_AS_probs', 'all_AS_probs_1', 'all_AS_probs_2', 'all_AS_probs_3', 'all_AS_probs_4'], 'Sequence', mean_prob, mean_var)
-            squidly_ensemble['mean'] = means
-            squidly_ensemble['entropy'] = entropy_values
-            squidly_ensemble['variance'] = epistemics
-            squidly_ensemble['Squidly_Ensemble_Residues'] = residues
-            squidly_ensemble.set_index('label', inplace=True)
-            squidly_ensemble.to_csv(os.path.join(output_folder, f'{run_name}_squidly_ensemble.csv'))
-            squidly_df = squidly_ensemble
             squidly_df['label'] = squidly_df.index
-            squidly_df['Squidly_CR_Position'] = residues
+            squidly_df['Squidly_CR_Position'] = squidly_df['Squidly_Ensemble_Residues']
             
     ensemble = combine_squidly_blast(query_df, squidly_df, blast_df)
     blast_df.to_csv(os.path.join(output_folder, f'{run_name}_blast.csv'), index=False)
-    squidly_ensemble.to_pickle(os.path.join(output_folder, f'{run_name}_squidly.pkl'))
-    squidly_ensemble[[c for c in squidly_ensemble if c not in ['all_AS_probs', 'all_AS_probs_1', 'all_AS_probs_2', 'all_AS_probs_3', 'all_AS_probs_4', 'mean', 'entropy', 'variance']]].to_csv(os.path.join(output_folder, f'{run_name}_squidly.csv')) # Keep both so users can read it easily 
-
-    ensemble.to_csv(os.path.join(output_folder, f'{run_name}_ensemble.csv'), index=False)
+    ensemble.to_csv(os.path.join(output_folder, f'{run_name}_ensemble_with_blast.csv'), index=False)
     
 if __name__ == "__main__":
     app()

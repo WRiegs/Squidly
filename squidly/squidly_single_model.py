@@ -8,12 +8,10 @@ import torch
 import torch.nn as nn
 from esm import Alphabet, FastaBatchedDataset, ProteinBertModel, pretrained 
 import json
-import tqdm
 import pandas as pd
 import time
 import numpy as np
 import psutil
-import os
 import threading
 from Bio import SeqIO
 
@@ -53,26 +51,37 @@ def create_parser():
         help="Model to use for extracting representations - just used model name. E.g. esm2_t36_3B_UR50D or esm2_t48_15B_UR50D",
     )
     parser.add_argument(
-        "model_dir",
+        "AS_contrastive_model",
         type=pathlib.Path,
-        help="directory containing the models for the ensemble",
+        help="contrastive model to use for generating contrastive representations"
     )
     parser.add_argument(
-        "--mean_prob",
-        type=float,
-        default=0.6,
-        help="Mean probability threshold for identifying active site residues in the ensemble",
-    )
-    parser.add_argument(
-        "--mean_var",
-        type=float,
-        default=0.225,
-        help="Variance threshold for identifying active site residues in the ensemble",
+        "AS_model",
+        type=pathlib.Path,
+        help="Model to use for predicting active sites"
     )
     parser.add_argument(
         "output_dir",
         type=pathlib.Path,
         help="output directory for extracted representations",
+    )
+    parser.add_argument(
+        "--toks_per_batch", 
+        type=int, 
+        default=10, 
+        help="maximum batch size"
+    )
+    parser.add_argument(
+        "--AS_threshold",
+        type = float,
+        default=0.9,
+        help="Threshold for active site predict6on"
+    )
+    parser.add_argument(
+        "--logits",
+        action="store_true",
+        default=False,
+        help="Whether to output the logits for the active and binding site predictions"
     )
     parser.add_argument(
         "--monitor",
@@ -192,41 +201,6 @@ def get_fasta_from_df(df, output):
     return pathlib.Path(output+'.fasta')
 
 
-def compute_uncertainties(df, prob_columns, mean_prob=0.5, mean_var=1):
-    means, variances, residues, entropy_values  = [], [], [], []
-    for p1, p2, p3, p4, p5 in df[prob_columns].values:
-        mean_values = []
-        variance_values = []
-        entropys = []
-        indicies = []
-        for j in range(0, len(p1)):
-            try:
-                if j > len(p1): # only go to 1024 - a limitation atm
-                    mean_probs = 0
-                    entropy = 1
-                    vars = 1 # Highlight these are incorrect
-                else:
-                    eps = 1e-8 # For non-zeros
-                    all_probs = [p1[j] + eps, p2[j] + eps, p3[j] + eps, p4[j] + eps, p5[j] + eps]
-                    mean_probs = np.mean(all_probs)
-                    entropy = -((mean_probs * np.log2(mean_probs)) + ((1 - mean_probs) * np.log2(1 - mean_probs)))
-                    vars = np.var(all_probs) # use variance as a proxy
-                    if mean_probs > mean_prob and vars < mean_var: # Use the supplied cutoffs
-                        indicies.append(j)
-                mean_values.append(mean_probs)
-                variance_values.append(vars)
-                entropys.append(entropy)
-            except:
-                mean_values.append(0)
-                variance_values.append(1)
-                entropys.append(1)
-        means.append(mean_values)
-        variances.append(variance_values)
-        entropy_values.append(entropys)
-        residues.append('|'.join([str(s) for s in indicies]))
-    return means, entropy_values, variances, residues
-
-
 def main(args):
     if args.esm2_model == "esm2_t48_15B_UR50D":
         args.esm2_model=  "esm2_t48_15B_UR50D" 
@@ -259,39 +233,26 @@ def main(args):
     
     model, alphabet = pretrained.load_model_and_alphabet(args.esm2_model)
     model.eval()
-    model = model.to(device)
+    
+    # load the contrastive model
+    AS_contrastive_model = ContrastiveModel(input_dim=embedding_size, output_dim=128)
+    AS_contrastive_model.load_state_dict(torch.load(args.AS_contrastive_model))
+    AS_contrastive_model.eval()
+    if torch.cuda.is_available():
+        model = model.cuda()
+        AS_contrastive_model = AS_contrastive_model.cuda()
+        print("Transferred representation models to GPU")
+        
+    # Load AS LSTM models
+    AS_model = ProteinLSTM(embedding_dim=128, hidden_dim=128, output_dim=1, num_layers=2, dropout_rate=0.1)
+    AS_model.load_state_dict(torch.load(args.AS_model))
+    AS_model.eval()
+    if torch.cuda.is_available():
+        AS_model = AS_model.cuda()
+        print("Transferred AS models to GPU")
 
-    # AS_models
-    AS_model_paths = list(args.model_dir.glob("*.pt"))
-    AS_model_paths = sorted(AS_model_paths, key=lambda x: int(x.stem.split('_')[-1])) # models must be named model_1.pt etc
-    LSTM_model_paths = list(args.model_dir.glob("*.pth"))
-    LSTM_model_paths = sorted(LSTM_model_paths, key=lambda x: int(x.stem.split('_')[-1]))
-    if len(AS_model_paths) != len(LSTM_model_paths):
-        raise ValueError("Number of AS models and LSTM models in model dir must be the same")
-
-    # now load each model
-    AS_models = []
-    LSTM_models = []
-    ensemble_outputs = {}
-    count = 0
-    for as_model_path, lstm_model_path in zip(AS_model_paths, LSTM_model_paths):
-        count += 1
-        model_number = count
-        AS_model = ContrastiveModel(input_dim=embedding_size, output_dim=128)
-        AS_model.load_state_dict(torch.load(as_model_path))
-        AS_model.eval().to(device)
-        LSTM_model = ProteinLSTM(embedding_dim=128, hidden_dim=128, output_dim=1, num_layers=2, dropout_rate=0.1)
-        LSTM_model.load_state_dict(torch.load(lstm_model_path))
-        LSTM_model.eval().to(device)
-        AS_models.append(AS_model)
-        LSTM_models.append(LSTM_model)
-        ensemble_outputs[f'model_{model_number}'] = {
-            "labels": [],
-            "all_AS_probs_list": [],
-        }
-    print(f"Loaded {len(ensemble_outputs.keys())} models for the ensemble")
     dataset = FastaBatchedDataset.from_file(args.file)
-    batches = dataset.get_batch_indices(10, extra_toks_per_seq=1) # set tokens per batch to be 10 so that we default to 1 sequence per batch for 1024 len
+    batches = dataset.get_batch_indices(args.toks_per_batch, extra_toks_per_seq=1)
     data_loader = torch.utils.data.DataLoader(
         dataset, collate_fn=alphabet.get_batch_converter(), batch_sampler=batches
     )
@@ -300,20 +261,32 @@ def main(args):
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     with torch.no_grad():
-        for batch_idx, (labels, strs, toks) in tqdm.tqdm(enumerate(data_loader),
-                                                         total=len(data_loader),
-                                                         desc="Squidly Ensemble Inference",
-                                                         bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]"):
+        embeddings_labels = []
+        predicted_AS_residues = []
+        AS_probabilities_list = []
+        active_sites_reps = []
+        all_AS_probs_list = []
+        CR_probabilities_predicted = []
+        seq_lens = []
+
+        for batch_idx, (labels, strs, toks) in enumerate(data_loader):
+            print(
+                f"Processing {batch_idx + 1} of {len(batches)} batches ({toks.size(0)} sequences)"
+            )
             if torch.cuda.is_available():
                 toks = toks.to(device="cuda", non_blocking=True)
+
             out = model(toks, repr_layers=[final_layer], return_contacts=False)
+
             representations = {
                 layer: t.to(device="cpu") for layer, t in out["representations"].items()
             }
+            
             for i, label in enumerate(labels):
                 args.output_file = args.output_dir / f"{label}.pt"
                 args.output_file.parent.mkdir(parents=True, exist_ok=True)
                 result = {"label": label}
+
                 if "per_tok" in include:
                     result["representations"] = {
                         layer: t[i, 1 : len(strs[i]) + 1].clone()
@@ -321,78 +294,93 @@ def main(args):
                     }
                 active_sites = []
                 pos = 0
+                
                 seq = result["representations"][final_layer]
+                
+                dataloader = torch.utils.data.DataLoader(seq, batch_size=len(seq), shuffle=False)
+                AS_contrastive_rep = []
+                # put the dataloader through the model and get the new sequence
+                for batch in dataloader:
+                    batch = batch.to(device)
+                    AS_contrastive_rep.extend(AS_contrastive_model(batch))
+                    del batch
 
-                streams = [torch.cuda.Stream() for _ in range(len(AS_models))]
-                futures = []
-                def run_in_stream(stream, model_name, AS_contrastive_model, AS_model):
-                    with torch.cuda.stream(stream):
-                        AS_contrastive_model.eval()
-                        AS_model.eval()
-                        dataloader = torch.utils.data.DataLoader(seq, batch_size=len(seq), shuffle=False)
-                        AS_contrastive_rep = []
-                        for batch in dataloader:
-                            batch = batch.to(device)
-                            AS_contrastive_rep.extend(AS_contrastive_model(batch))
-                            del batch
-                        AS_contrastive_rep = torch.stack(AS_contrastive_rep)
-                        seq_len = AS_contrastive_rep.size(0)
-                        AS_contrastive_rep = manual_pad_sequence_tensors([AS_contrastive_rep], 1024)[0]
-                        AS_probabilities = AS_model(AS_contrastive_rep)
-                        AS_probabilities = torch.sigmoid(AS_probabilities)
-                        ensemble_outputs[model_name]["labels"].append(result["label"])
-                        ensemble_outputs[model_name]["all_AS_probs_list"].append(AS_probabilities[:seq_len].detach().cpu().numpy())
+                # make tensor of the representations
+                AS_contrastive_rep = torch.stack(AS_contrastive_rep)
+                seq_len = AS_contrastive_rep.size(0)
+                seq_lens.append(seq_len)
+                AS_contrastive_rep = manual_pad_sequence_tensors([AS_contrastive_rep], 1024)[0]
 
-                for stream, (model_name, AS_contrastive_model, AS_model) in zip(
-                    streams, zip(ensemble_outputs.keys(), AS_models, LSTM_models)
-                ):
-                    t = threading.Thread(
-                        target=run_in_stream, args=(stream, model_name, AS_contrastive_model, AS_model)
-                    )
-                    futures.append(t)
-
-                for f in futures:
-                    f.start()
-                for f in futures:
-                    f.join()
-                torch.cuda.synchronize()
-    ensemble_results = {}
-    for model_name, model_outputs in ensemble_outputs.items():
+                # predict using the AS LSTM model
+                active_sites = AS_model(AS_contrastive_rep.cuda())
+                active_sites = torch.sigmoid(active_sites)
+                AS_probabilities = active_sites.cpu()
+                as_site_reps = []
+                if args.logits:
+                    logits = [round(logit.item(), 3) for logit in active_sites.cpu()]
+                    AS_probabilities_list.append(logits)
+                active_sites = [i for i, x in enumerate(active_sites) if x > args.AS_threshold] 
+                as_site_reps = [AS_contrastive_rep[i].cpu() for i in active_sites]
+                # find the probabilities of the active_sites
+                active_sites_probs = [AS_probabilities[i] for i in active_sites]
+                CR_probabilities_predicted.append(active_sites_probs)
+                all_AS_probs_list.append(AS_probabilities)
+                predicted_AS_residues.append(active_sites)
+                active_sites_reps.append(as_site_reps)
+                embeddings_labels.append(result["label"])
+    
+    if csv is not None:
         results = []
-        for label, all_AS_probs in zip(
-            model_outputs["labels"],
-            model_outputs["all_AS_probs_list"],
-        ):
-            results.append([label, all_AS_probs])
-        columns = ["label", "all_AS_probs"]
-        model_df = pd.DataFrame(results, columns=columns)
+        for label, AS_residues, AS_probs, AS_site_reps, all_AS_probs in zip(embeddings_labels, predicted_AS_residues, CR_probabilities_predicted, active_sites_reps, all_AS_probs_list):        
+            # grab the AA from the sequence itself given the AS_residue positions
+            seq = df[df['Entry'] == label]['Sequence'].values[0]
+            AS_AA = '|'.join([seq[residue] for residue in AS_residues])
+            AS_residues = '|'.join([str(residue) for residue in AS_residues])
+            # round the AS_probs to 4 decimal places
+            # Convert to a numpy array firt and flatten
+            AS_probs = np.array(AS_probs).flatten()
+            AS_probs = [round(float(prob), 4) for prob in AS_probs]
+            all_AS_probs = np.array(all_AS_probs).flatten()
+            short_AS_probs = [round(float(prob), 4) for prob in all_AS_probs]
+            AS_probs = '|'.join([str(prob) for prob in AS_probs])
+            AS_site_reps = np.array(AS_site_reps)
+            results.append([label, AS_residues, AS_AA, AS_probs, AS_site_reps, short_AS_probs])
 
-        if csv is not None:
-            model_df = pd.merge(df, model_df, how='left', left_on='Entry', right_on='label')
+        # save the results as a df, using the list of lists, with no index
+        results_df = pd.DataFrame(results, columns=["label", "Squidly_CR_Position", "Squidly_CR_AA", "Squidly_CR_probabilities", "Squidly_CR_representations", "all_AS_probs"], index=None)
+        results_df = pd.merge(df, results_df, how='left', left_on='Entry', right_on='label')
+        results_df.to_csv(str(args.output_dir / args.file.stem) + '_results.pkl')
+        args.file.unlink()  
+    else:
+        results = []
+        for label, AS_residues, AS_probs, AS_site_reps, all_AS_probs in zip(embeddings_labels, predicted_AS_residues, CR_probabilities_predicted, active_sites_reps, all_AS_probs_list):        
+            AS_residues = '|'.join([str(residue) for residue in AS_residues])
+            AS_probs = np.array(AS_probs).flatten()
+            AS_probs = '|'.join([str(prob) for prob in AS_probs])
+            AS_site_reps = np.array(AS_site_reps)
+            all_AS_probs = np.array(all_AS_probs).flatten()
+            short_AS_probs = [round(float(prob), 4) for prob in all_AS_probs]
+            results.append([label, AS_residues, AS_probs, AS_site_reps, short_AS_probs])
 
-        #output_path = args.output_dir / f"{args.file.stem}_{model_name}_results.pkl"
-        ensemble_results[model_name] = model_df
-        # model_df.to_pickle(output_path)
-    # get the ensemble uncertainties and results
-    squidly_df = pd.DataFrame()
-    for model_i, (model_name, model_df) in enumerate(ensemble_results.items()):
-        model_df = model_df.rename(columns={"all_AS_probs": f"all_AS_probs_{model_i+1}"})
-        if squidly_df.empty:
-            squidly_df = model_df
-        else:
-            squidly_df = squidly_df.merge(model_df[['label', f'all_AS_probs_{model_i+1}']], on='label', how='outer')
-
-    prob_cols = [f'all_AS_probs_{i+1}' for i in range(len(ensemble_results.keys()))]
-    squidly_ensemble = squidly_df
-    means, entropy_values, epistemics, residues = compute_uncertainties(squidly_ensemble, prob_cols, args.mean_prob, args.mean_var)
-    squidly_ensemble['mean'] = means
-    squidly_ensemble['entropy'] = entropy_values
-    squidly_ensemble['variance'] = epistemics
-    squidly_ensemble['Squidly_Ensemble_Residues'] = residues
-    squidly_ensemble.set_index('label', inplace=True)
-    squidly_ensemble.to_pickle(os.path.join(args.output_dir, f'{args.file.stem}_squidly_ensemble.pkl'))
-    squidly_ensemble.to_csv(args.output_dir / f"{args.file.stem}_squidly_ensemble.csv")
-    squidly_ensemble[[c for c in squidly_ensemble if c not in ['all_AS_probs_5', 'all_AS_probs_1', 'all_AS_probs_2', 'all_AS_probs_3', 'all_AS_probs_4', 'mean', 'entropy', 'variance']]].to_csv(args.output_dir / f"{args.file.stem}_squidly_ensemble_predictions_only.csv")
+        # save the results as a df, using the list of lists, with no index
+        results_df = pd.DataFrame(results, columns=["label", "Squidly_CR_Position", "Squidly_CR_probabilities", "Squidly_CR_representations", "all_AS_probs"], index=None)
+        results_df.to_pickle(str(args.output_dir / args.file.stem) + '_results.pkl')
+    
+    if args.logits:
+        # make dict for seq lens
+        dict_of_lens = dict(zip(embeddings_labels, seq_lens))
+        
+        # go through each sequence and shorten the probabilities to be the length of the sequence, to remove the padding output logits
+        for i, seq_len in enumerate(seq_lens):
+            AS_probabilities_list[i] = AS_probabilities_list[i][:seq_len]
+        
+        # now make a dictionary where every sublist in the list is a dictionary with the label as key and the probabilities as a list of values
+        dict_of_AS_probs = dict(zip(embeddings_labels, AS_probabilities_list))
+        
+        # save the dictionary as a json file
+        with open(str(args.output_dir / 'Squidly_CR_probabilities.json'), 'w') as f:
+            json.dump(dict_of_AS_probs, f)
+    
 
 if __name__ == "__main__":
     parser = create_parser()
@@ -406,7 +394,7 @@ if __name__ == "__main__":
         # Start the monitoring thread
         monitor_thread = threading.Thread(target=monitor_resources)
         monitor_thread.start()
-
+    
     main(args)
     
     if args.monitor:
