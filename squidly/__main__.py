@@ -328,7 +328,7 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
             # Now combine the two and save all to the output folder
             # get the input filename 
             input_filename = fasta_file.split('/')[-1].split('.')[0]
-            squidly_df = pd.read_pickle(os.path.join(output_folder, f'{run_name}_ensemble.pkl'))
+            squidly_df = pd.read_pickle(os.path.join(output_folder, f'{input_filename}_squidly_ensemble.pkl'))
             squidly_ensemble = squidly_df
             # get the "label" column from index
             squidly_ensemble['label'] = squidly_ensemble.index
