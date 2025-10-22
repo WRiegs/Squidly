@@ -109,9 +109,11 @@ squidly run --help
 
 The below figure showcases Squidly's performance on the CataloDB benchmark at varying thresholds for probability and variance in the ensemble model. 
 
-<img width="3439" height="3559" alt="ensemble_threshold_CataloDB" src="https://github.com/user-attachments/assets/10c1f938-fc8c-43a4-9784-55b2a2147883" />
+<img width="4207" height="4241" alt="CataloDB_threshold_heatmap" src="https://github.com/user-attachments/assets/b98ceed4-5f84-4d7d-9196-fc73405792f1" />
 
-Optimal thresholds for specific uses may vary. Lower thresholds have been found to work in practice when preicting certain EC numbers... figure coming soon.
+
+Optimal thresholds for specific uses may vary. Lower probability thresholds have been found to work in practice when preicting certain EC numbers:
+<img width="4193" height="1405" alt="perEC_threshold_figure" src="https://github.com/user-attachments/assets/0fe07343-e349-4e7d-9824-d0e767b8a66c" />
 
 ## Data Availability
 All datasets used in the paper are available here https://zenodo.org/records/15541320.
