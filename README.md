@@ -1,9 +1,12 @@
-# Squidly <img width="500" alt="Squidly_mascot" src="https://github.com/user-attachments/assets/5ee9dd56-9397-4ff1-b4f6-b8a6982d40be" />
+# Squidly 
+<p align="center">
+ <img width="400" alt="Squidly_mascot" src="https://github.com/user-attachments/assets/5ee9dd56-9397-4ff1-b4f6-b8a6982d40be" />
+</p>
 
-<img width="3591" height="2254" alt="Panel_1_crisp_final_colours" src="https://github.com/user-attachments/assets/dd29a9a2-67aa-45d2-9d39-9c7d6a8e976a" />
 
 Squidly, is a tool that employs a biologically informed contrastive learning approach to accurately predict catalytic residues from enzyme sequences. We offer Squidly as ensembled with Blast to achieve high accuracy at low and high sequence homology settings.
 
+<img width="3591" height="2254" alt="Panel_1_crisp_final_colours" src="https://github.com/user-attachments/assets/dd29a9a2-67aa-45d2-9d39-9c7d6a8e976a" />
 
 If you use squidly in your work please cite our preprint: https://www.biorxiv.org/content/10.1101/2025.06.13.659624v1
 
@@ -138,6 +141,7 @@ python reproduction_scripts/reproduce_squidly_CataloDB.py --scheme 2 --sample_li
 ```
 
 You must choose the pair scheme for the Squidly models:
+
 <img src="pair_scheme_fig_.png" width=50%>
 
 Scheme 2 and 3 had the sample limit parameter set to 16000, and scheme 1 at 4000000.
