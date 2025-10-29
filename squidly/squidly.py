@@ -298,7 +298,7 @@ def main(args):
     print(f"Read {args.file} with {len(dataset)} sequences")
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-
+    #https://www.youtube.com/shorts/8k5RlykEw3w
     with torch.no_grad():
         for batch_idx, (labels, strs, toks) in tqdm.tqdm(enumerate(data_loader),
                                                          total=len(data_loader),
