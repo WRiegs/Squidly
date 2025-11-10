@@ -22,7 +22,7 @@ Currently we expect GPU access but if you require a CPU only version please let 
 ```
 conda create --name squidly python=3.10
 conda activate squidly
-pip install squidly
+pip install squidly==0.0.6
 squidly install
 ```
 Running `squidly install` should automatically download all models from huggingface. Now you can run squidly (see **Usage** below).
