@@ -22,6 +22,7 @@ Currently we expect GPU access but if you require a CPU only version please let 
 ```
 conda create --name squidly python=3.10
 conda activate squidly
+conda install -c conda-forge huggingface_hub
 pip install squidly
 squidly install
 ```
