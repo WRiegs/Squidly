@@ -20,9 +20,11 @@ Squidly can only predict sequences of less than 1024 residues!
 Currently we expect GPU access but if you require a CPU only version please let us know and we can update this!
 ### Installation
 ```
-conda create --name squidly python=3.10
+conda create --name squidly
 conda activate squidly
 conda install -c conda-forge huggingface_hub
+conda install -c bioconda -c conda-forge diamond -y
+conda update diamond
 pip install squidly
 squidly install
 ```
