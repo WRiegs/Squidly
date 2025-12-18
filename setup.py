@@ -49,7 +49,7 @@ setup(name='squidly',
 
           ]
       },
-      install_requires=['pandas>=2.1.4', 'numpy>=1.22.4', 'fair-esm', 'sciutil>=1.0.3', 'typer', 'psutil', 'biopython',
+      install_requires=['pandas>=2.1.4', 'numpy>=1.22.4', 'fair-esm', 'typer', 'psutil', 'biopython',
                         'sciutil', 'tqdm', 'enzymetk', 'huggingface_hub'],
       python_requires='>=3.10',
       data_files=[("", ["LICENSE"])]

@@ -42,13 +42,15 @@ For example to run the 3B model with a fasta file
 squidly run example.fasta esm2_t36_3B_UR50D 
 ```
 
+In the folder you have run that, you can now see the generated files from squidly e.g. `squidly_input_fasta_squidly_ensemble_predictions_only.csv`
+
 Squidly can also be further ensembled with BLAST (you need to pass the database as well)
 ```
 squidly run example.fasta esm2_t36_3B_UR50D output_folder/ --database reviewed_sprot_08042025.csv
 ```
 Where `reviewed_sprot_08042025.csv` is the example database (i.e. a csv file with the following columns) 
 
-You can see ours which is zipped in the data folder..
+You can see ours which is zipped in the data folder (you will need to unzip to use this.)
 
 
 | Entry      | Sequence         | Residue                                  |
