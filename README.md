@@ -13,11 +13,14 @@ If you use squidly in your work please cite our preprint: https://www.biorxiv.or
 Also if you have any issues installing, please post an issue! We have tested this on ubuntu.
 
 ### Requirements
-Squidly is dependant on the ESM2 3B or 15B protein language model. Running Suidly will automatically attempt to download each model. The Smaller 3B model is lighter, runs faster and requires less VRAM. The 3B and 15B models expect roughly 25GB and 74GB of VRAM, respectively. Our tests on 100 sequences with an average length of 400+ took about 40 seconds and 3 minutes for the 3B and 15B model.
+Squidly is dependant on the ESM2 3B or 15B protein language model (so requires GPU). Running Suidly will automatically attempt to download each model. The Smaller 3B model is lighter, runs faster and requires less VRAM. The 3B and 15B models expect roughly 25GB and 74GB of VRAM, respectively. Our tests on 100 sequences with an average length of 400+ took about 40 seconds and 3 minutes for the 3B and 15B model.
 
 Squidly can only predict sequences of less than 1024 residues!
 
 Currently we expect GPU access but if you require a CPU only version please let us know and we can update this!
+
+Note you can run the blast version without GPU, just run the `--database reviewed_sprot_08042025.csv` version described below. Then BLAST will run before squidly and you can use these files.
+
 ### Installation
 ```
 conda create --name squidly
@@ -27,6 +30,9 @@ conda install -c bioconda -c conda-forge diamond -y
 conda update diamond
 pip install squidly
 squidly install
+wget https://raw.githubusercontent.com/WRiegs/Squidly/main/data/reviewed_sprot_08042025.csv.zip
+unzip reviewed_sprot_08042025.csv.zip
+conda install sbl::clustalomega
 ```
 Running `squidly install` should automatically download all models from huggingface. Now you can run squidly (see **Usage** below).
 
@@ -37,6 +43,9 @@ Note if you get the below error:
 
 
 ## Usage
+
+See the colab notebook (SquidlyExampleColab.ipynb) for an example, it also shows how the input files are formatted. 
+
 By default squidly runs the ensembled squidly model. It's optimised to run as fast as the single model.
 
 For example to run the 3B model with a fasta file
@@ -53,7 +62,6 @@ squidly run example.fasta esm2_t36_3B_UR50D output_folder/ --database reviewed_s
 Where `reviewed_sprot_08042025.csv` is the example database (i.e. a csv file with the following columns) 
 
 You can see ours which is zipped in the data folder (you will need to unzip to use this.)
-
 
 | Entry      | Sequence         | Residue                                  |
 |------------|------------------|------------------------------------------|
