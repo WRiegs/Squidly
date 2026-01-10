@@ -25,7 +25,7 @@ Note you can run the blast version without GPU, just run the `--database reviewe
 ```
 conda create --name squidly
 conda activate squidly
-conda install -c conda-forge huggingface_hub
+conda install -c conda-forge huggingface_hub -y
 conda install -c bioconda -c conda-forge diamond -y
 conda update diamond
 pip install squidly
@@ -34,6 +34,8 @@ wget https://raw.githubusercontent.com/WRiegs/Squidly/main/data/reviewed_sprot_0
 unzip reviewed_sprot_08042025.csv.zip
 conda install sbl::clustalomega
 ```
+Install the most relevant version of Torch for your system (Cuda vs CPU): https://pytorch.org/get-started/locally/
+
 Running `squidly install` should automatically download all models from huggingface. Now you can run squidly (see **Usage** below).
 
 Note if you get the below error:
@@ -70,12 +72,19 @@ You can see ours which is zipped in the data folder (you will need to unzip to u
 | A0A024B7W1 | MKNPKKKSGGFRIV   | 1552\|1576\|1636\|2580\|2665\|2701\|2737 |
 | A0A024RXP8 | MYRKLAVISAFL     | 228\|233                                 |
 
-A threshold can be selected for sequence identity between the query and the blast database, such that Squidly will be used under a certain threshold. This is because BLAST tends to outperform all currently available ML models at high sequence identities
+A threshold can be selected for sequence identity between the query and the blast database, such that Squidly will be used under a certain threshold. This is because BLAST tends to outperform all currently available ML models at high sequence identities.
 
-Running a single Squidly model (non ensembled)
-```bash 
-squidly run example.fasta esm2_t36_3B_UR50D output_folder/ --single-model --cr-model-as squidly/models/3B/CataloDB_esm2_t36_3B_UR50D_CR_1.pt --lstm-model-as squidly/models/3B/CataloDB_esm2_t36_3B_UR50D_LSTM_1.pth
+Running the CPU version of Squidly:
+```bash
+squidly run example.fasta esm2_t36_3B_UR50D --cpu
 ```
+
+Running the "iterative" version of Squidly (ensemble models not run in parallel):
+```bash
+squidly run example.fasta esm2_t36_3B_UR50D --iterative
+```
+This saves some GPU/CPU ram usage - not much because the squidly models are small compared to ESM2.
+The CPU mode is run in iterative mode by default.
 
 #### Squidly args 
 ```bash

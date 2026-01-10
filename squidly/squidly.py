@@ -80,6 +80,18 @@ def create_parser():
         default=False,
         help="Monitor system resources during script execution"
     )
+    parser.add_argument(
+        "--single_model",
+        action="store_true",
+        default=False,
+        help="Runs one squidly model at a time for the ensemble - much slower, but less ram needed."
+    )
+    parser.add_argument(
+        "--cpu",
+        action="store_true",
+        default=False,
+        help="runs models on CPU"
+    )
     return parser
 
 
@@ -237,8 +249,11 @@ def main(args):
         final_layer = 36
         embedding_size = 2560
         model_name = "esm2_t36_3B_UR50D"
-
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    if args.cpu:
+        device = torch.device('cpu')
+    else:
+        device = torch.device('cuda')
 
     include = "per_tok"
     
@@ -278,10 +293,16 @@ def main(args):
         count += 1
         model_number = count
         AS_model = ContrastiveModel(input_dim=embedding_size, output_dim=128)
-        AS_model.load_state_dict(torch.load(as_model_path))
+        if args.cpu:
+            AS_model.load_state_dict(torch.load(as_model_path, map_location=torch.device('cpu')))
+        else:
+            AS_model.load_state_dict(torch.load(as_model_path))
         AS_model.eval().to(device)
         LSTM_model = ProteinLSTM(embedding_dim=128, hidden_dim=128, output_dim=1, num_layers=2, dropout_rate=0.1)
-        LSTM_model.load_state_dict(torch.load(lstm_model_path))
+        if args.cpu:
+            LSTM_model.load_state_dict(torch.load(lstm_model_path, map_location=torch.device('cpu')))
+        else:
+            LSTM_model.load_state_dict(torch.load(lstm_model_path))
         LSTM_model.eval().to(device)
         AS_models.append(AS_model)
         LSTM_models.append(LSTM_model)
@@ -304,8 +325,7 @@ def main(args):
                                                          total=len(data_loader),
                                                          desc="Squidly Ensemble Inference",
                                                          bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]"):
-            if torch.cuda.is_available():
-                toks = toks.to(device="cuda", non_blocking=True)
+            toks = toks.to(device)
             out = model(toks, repr_layers=[final_layer], return_contacts=False)
             representations = {
                 layer: t.to(device="cpu") for layer, t in out["representations"].items()
@@ -323,10 +343,42 @@ def main(args):
                 pos = 0
                 seq = result["representations"][final_layer]
 
-                streams = [torch.cuda.Stream() for _ in range(len(AS_models))]
-                futures = []
-                def run_in_stream(stream, model_name, AS_contrastive_model, AS_model):
-                    with torch.cuda.stream(stream):
+                if not args.cpu and not args.single_model:
+                    streams = [torch.cuda.Stream() for _ in range(len(AS_models))]
+                    futures = []
+                    def run_in_stream(stream, model_name, AS_contrastive_model, AS_model):
+                        with torch.cuda.stream(stream):
+                            AS_contrastive_model.eval()
+                            AS_model.eval()
+                            dataloader = torch.utils.data.DataLoader(seq, batch_size=len(seq), shuffle=False)
+                            AS_contrastive_rep = []
+                            for batch in dataloader:
+                                batch = batch.to(device)
+                                AS_contrastive_rep.extend(AS_contrastive_model(batch))
+                                del batch
+                            AS_contrastive_rep = torch.stack(AS_contrastive_rep)
+                            seq_len = AS_contrastive_rep.size(0)
+                            AS_contrastive_rep = manual_pad_sequence_tensors([AS_contrastive_rep], 1024)[0]
+                            AS_probabilities = AS_model(AS_contrastive_rep)
+                            AS_probabilities = torch.sigmoid(AS_probabilities)
+                            ensemble_outputs[model_name]["labels"].append(result["label"])
+                            ensemble_outputs[model_name]["all_AS_probs_list"].append(AS_probabilities[:seq_len].detach().cpu().numpy())
+
+                    for stream, (model_name, AS_contrastive_model, AS_model) in zip(
+                        streams, zip(ensemble_outputs.keys(), AS_models, LSTM_models)
+                    ):
+                        t = threading.Thread(
+                            target=run_in_stream, args=(stream, model_name, AS_contrastive_model, AS_model)
+                        )
+                        futures.append(t)
+
+                    for f in futures:
+                        f.start()
+                    for f in futures:
+                        f.join()
+                    torch.cuda.synchronize()
+                else:
+                    def run_standalone(model_name, AS_contrastive_model, AS_model):
                         AS_contrastive_model.eval()
                         AS_model.eval()
                         dataloader = torch.utils.data.DataLoader(seq, batch_size=len(seq), shuffle=False)
@@ -342,20 +394,9 @@ def main(args):
                         AS_probabilities = torch.sigmoid(AS_probabilities)
                         ensemble_outputs[model_name]["labels"].append(result["label"])
                         ensemble_outputs[model_name]["all_AS_probs_list"].append(AS_probabilities[:seq_len].detach().cpu().numpy())
+                    for model_name, AS_contrastive_model, AS_model in zip(ensemble_outputs.keys(), AS_models, LSTM_models):
+                        run_standalone(model_name, AS_contrastive_model, AS_model)
 
-                for stream, (model_name, AS_contrastive_model, AS_model) in zip(
-                    streams, zip(ensemble_outputs.keys(), AS_models, LSTM_models)
-                ):
-                    t = threading.Thread(
-                        target=run_in_stream, args=(stream, model_name, AS_contrastive_model, AS_model)
-                    )
-                    futures.append(t)
-
-                for f in futures:
-                    f.start()
-                for f in futures:
-                    f.join()
-                torch.cuda.synchronize()
     ensemble_results = {}
     for model_name, model_outputs in ensemble_outputs.items():
         results = []

@@ -182,6 +182,8 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
         output_folder: Annotated[str, typer.Argument(help="Where to store results (full path!)")] = 'Current Directory', 
         run_name: Annotated[str, typer.Argument(help="Name of the run")] = 'squidly', 
         single_model: Annotated[bool, typer.Option(help="Whether or not to use single model instead of the ensemble. We recommend the ensemble. It is faster than the single model version.")] = False,
+        cpu: Annotated[bool, typer.Option(help="Runs the model in CPU mode (ensemble only for now, runs sequentially anyways)")]=False,
+        iterative: Annotated[bool, typer.Option(help="Runs the ensemble models 1 after another rather than in parallel - can save some GPU memory (not much) whilst being 5x slower. Ensemble only.")]=False,
         model_folder: Annotated[str, typer.Option(help="Full path to the model folder.")] = '',
         database:  Annotated[str, typer.Option(help="Full path to database csv (if you want to do the ensemble), needs 3 columns: 'Entry', 'Sequence', 'Residue' where residue is a | separated list of residues. See default DB provided by Squidly.")] = 'None',
         cr_model_as: Annotated[str, typer.Option(help="Contrastive learning model for the catalytic residue prediction when not using the ensemble. Ensure it matches the esm model.")] = '', 
@@ -302,7 +304,12 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
                 with open(chunk_fasta, 'w+') as fout:
                     for seq_id, seq in df_chunk[['id', 'seq']].values:  # type: ignore 
                         fout.write(f">{seq_id}\n{seq}\n")
-                cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), chunk_fasta, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder]
+                if cpu:
+                    cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), chunk_fasta, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder, '--cpu']
+                elif iterative:
+                    cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), chunk_fasta, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder, '--single_model']
+                else:
+                    cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), chunk_fasta, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder]
                 u.warn_p(["Running command:", ' '.join(cmd)])
                 run_subprocess(cmd)
                 input_filename = chunk_fasta.split('/')[-1].split('.')[0]
@@ -321,7 +328,12 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
             squidly_ensemble['label'] = squidly_ensemble.index
         else:
             fasta_file = os.path.join(output_folder, f'{run_name}_input_fasta.fasta')
-            cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), fasta_file, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder]
+            if cpu:
+                cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), fasta_file, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder, '--cpu']
+            elif iterative:
+                cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), fasta_file, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder, '--single_model']
+            else:
+                cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), fasta_file, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder]
             u.warn_p(["Running non-chunked command:", ' '.join(cmd)])
             # run using os.system so we can see the output
             run_subprocess(cmd)
@@ -399,24 +411,3 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
     
 if __name__ == "__main__":
     app()
-    
-# Example command
-# squidly AEGAN_with_active_site_seqs_NN.fasta esm2_t36_3B_UR50D
-# python __main__.py '../tests/AEGAN_with_active_site_seqs_NN.fasta' esm2_t36_3B_UR50D tmp/ --database ../data/reviewed_sprot_08042025.csv
-# python __main__.py '../tests/AEGAN_with_active_site_seqs_NN.fasta' esm2_t36_3B_UR50D tmp/ --chunk 1
-# nohup python __main__.py /disk1/ariane/vscode/squidly/data/CARE/fastas/train_swissprot.fasta esm2_t36_3B_UR50D CARE/ train_swissprot --chunk 1000 & 
-# squidly fastas/30_protein_test.fasta esm2_t36_3B_UR50D output/ --chunk 1000
-
-# nohup squidly /disk1/ariane/vscode/squidly/data/CARE/fastas/train_swissprot.fasta esm2_t36_3B_UR50D output/ train_swissprot --database reviewed_sprot_08042025.csv --blast-threshold 30 & 
-# squidly cataloDB_test.fasta esm2_t36_3B_UR50D output/ cataloDB_3B --database swissprot_with_active_site_seqs_SquidlyBenchmark.csv --blast-threshold 30 --as-threshold 0.97 --lstm-model-as CataloDB_final_models/Squidly_LSTM_3B.pth --cr-model-as CataloDB_final_models/Squidly_CL_3B.pt
-# nohup squidly /disk1/ariane/vscode/squidly/data/CARE/fastas/protein_train.fasta esm2_t36_3B_UR50D /disk1/ariane/vscode/squidly/data/train_output/ protein_train & 
-# squidly /disk1/ariane/vscode/squidly/data/CARE/fastas/30_protein_test.fasta esm2_t36_3B_UR50D /disk1/ariane/vscode/squidly/data/train_output/ 30_protein_test
-# squidly /disk1/ariane/vscode/squidly/data/CARE/fastas/30_protein_test.fasta esm2_t36_3B_UR50D /disk1/ariane/vscode/squidly/data/train_output/ 30_protein_test_low_thresh --as-threshold 0.5
-# nohup squidly  /disk1/ariane/vscode/squidly/data/CARE/fastas/protein_train.fasta esm2_t36_3B_UR50D /disk1/ariane/vscode/squidly/data/train_output/ protein_train_low_thresh --as-threshold 0.5 --chunk 3000 &
-# squidly TPP_swissprot_predictions_top_20.fasta esm2_t36_3B_UR50D output/ TPP_swissprot_predictions_top_20 --database /disk1/ariane/vscode/squidly/data/reviewed_sprot_08042025.csv --blast-threshold 30 & 
-#  python __main__.py /disk1/ariane/vscode/squidly/helen/TPP_swissprot_predictions_top_20.fasta esm2_t36_3B_UR50D output/ /disk1/ariane/vscode/squidly/helen/TPP_swissprot_predictions_top_20 --database /disk1/ariane/vscode/squidly/data/reviewed_sprot_08042025.csv --blast-threshold 30
-
-# python squidly.py ../manuscript/cataloDB_test.fasta esm2_t36_3B_UR50D ../models/FinalModels/CataloDB_models_3_esm2_t36_3B_UR50D_2025-04-13/Scheme3_16000_2/models/temp_best_model.pt ../models/FinalModels/CataloDB_models_3_esm2_t36_3B_UR50D_2025-04-13/Scheme3_16000_2/LSTM/models/13-04-25_16-48_128_2_0.2_100_best_model.pth output/ --toks_per_batch 5 --AS_threshold 0.9
-# squidly input_data/cataloDB_test.fasta esm2_t36_3B_UR50D cataloDB_output/ --mean-prob 0.5
-
-#  squidly run /disk1/ariane/vscode/cec_degrader/to_publish/extremeophiles.fasta esm2_t36_3B_UR50D   --database data/reviewed_sprot_08042025.csv
