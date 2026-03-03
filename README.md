@@ -23,7 +23,7 @@ Note you can run the blast version without GPU, just run the `--database reviewe
 
 ### Installation
 ```
-conda create --name squidly
+conda create --name squidly pip
 conda activate squidly
 conda install -c conda-forge huggingface_hub -y
 conda install -c bioconda -c conda-forge diamond -y
