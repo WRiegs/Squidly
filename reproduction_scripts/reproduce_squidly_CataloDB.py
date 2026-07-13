@@ -36,6 +36,13 @@ def create_parser():
         help="Number of reruns. Default is 1",
         default=1
     )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        help="Path to the dataset folder (same layout as datasets/CataloDB). "
+             "Default is datasets/CataloDB",
+        default="datasets/CataloDB"
+    )
     return parser
 
 
@@ -53,9 +60,12 @@ def main():
         print("Running on CPU")
     
     # training datasets
-    
-    dataset_fasta = "datasets/CataloDB/fastas/train_and_test.fasta"
-    dataset_metadata = "datasets/CataloDB/All_metadata.tsv"
+    dataset_dir = args.dataset.rstrip("/")
+    dataset_name = os.path.basename(dataset_dir)
+    print(f"Dataset directory: {dataset_dir}")
+
+    dataset_fasta = f"{dataset_dir}/fastas/train_and_test.fasta"
+    dataset_metadata = f"{dataset_dir}/All_metadata.tsv"
 
     if args.scheme == 1:
         print("Scheme 1 selected")
@@ -80,7 +90,7 @@ def main():
         model_name = "esm2_t36_3B_UR50D"
     
         # set up the output directory with todays date and the scheme/dataset
-    output_dir = pathlib.Path(f"CataloDB_{args.scheme}_{model_name}_{datetime.datetime.now().strftime('%Y-%m-%d')}")
+    output_dir = pathlib.Path(f"{dataset_name}_{args.scheme}_{model_name}_{datetime.datetime.now().strftime('%Y-%m-%d')}")
     if not output_dir.exists():
         os.makedirs(output_dir)
     print(f"Output directory: {output_dir}")
@@ -92,11 +102,11 @@ def main():
     PAIR_SCHEME=f"{PSCHEME_OUT}/paired_embeddings_dataset.pt"
     META=f"{PSCHEME_OUT}metadata_paired.tsv"
     HPARAM="LSTM_Hyperparameters_bidirectional.json"
-    EVAL="datasets/CataloDB/final_test_set_post_structural_filtering.txt"      
+    EVAL=f"{dataset_dir}/final_test_set_post_structural_filtering.txt"
     LSTMOUT=f"{PSCHEME_OUT}LSTM/"
     MODEL=f"{PSCHEME_OUT}models/temp_best_model.pt"
     ASvBS="AS"
-    ADDITIONAL_TEST="datasets/CataloDB/empty_extra_test_validation.txt"
+    ADDITIONAL_TEST=f"{dataset_dir}/empty_extra_test_validation.txt"
     #benchmark datasets for the 6 common benchmarks based on unique SCOP families etc EF_families etc
     AEGAN_benchmark_dir = f"datasets/family_specific_embeddings_{model_name}/"
     AEGAN_benchmark_squid = f"{PSCHEME_OUT}family_specific_embeddings_squidly/"
