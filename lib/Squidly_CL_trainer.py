@@ -208,7 +208,7 @@ def main(args):
     if args.pair_scheme.is_file():
         # load the torch dataset directly
         print("Loading the pair scheme as a torch dataset...")
-        dataset = torch.load(args.pair_scheme)
+        dataset = torch.load(args.pair_scheme, weights_only=False)
     else:
         # raise an error
         raise ValueError("The pair scheme must be a pytorch data file that is correctly processed")

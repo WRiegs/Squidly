@@ -200,7 +200,7 @@ def train_model(model, epochs, patience, train_loader, val_loader, optimizer, lo
 
 def save_best_model(hyperparams, best_model_path, save_location):
     model = ProteinLSTM(embedding_dim=hyperparams['embedding_dim'], hidden_dim=hyperparams['hidden_dim'], output_dim=hyperparams['output_dim'], num_layers=hyperparams['num_layers'], dropout_rate=hyperparams['dropout_rate'])
-    model.load_state_dict(torch.load(best_model_path))
+    model.load_state_dict(torch.load(best_model_path, weights_only=False))
     
     # get best_model_path file name and remove prepath
     best_model_path = best_model_path.split('/')[-1]
@@ -244,7 +244,8 @@ def get_evaluation_metrics(actuals, predictions):
     FP = sum([1 for i in range(len(actuals)) if actuals[i] == 0 and predictions[i] == 1])
     FN = sum([1 for i in range(len(actuals)) if actuals[i] == 1 and predictions[i] == 0])
 
-    accuracy = (TP + TN) / (TP + TN + FP + FN)
+    total = TP + TN + FP + FN
+    accuracy = (TP + TN) / total if total != 0 else 0
     precision = TP / (TP + FP) if TP + FP != 0 else 0
     recall = TP / (TP + FN) if TP + FN != 0 else 0
     f1 = 2 * precision * recall / (precision + recall) if precision + recall != 0 else 0
@@ -273,7 +274,7 @@ def get_ROC_curve(actuals, predictions, save_location):
     plt.ylabel('True Positive Rate')
     plt.savefig(save_location + 'ROC_curve.png')
     
-    AUC_ROC = np.trapz(tpr, fpr)
+    AUC_ROC = np.trapezoid(tpr, fpr)
     return AUC_ROC
 
 
@@ -286,7 +287,7 @@ def get_PR_curve(actuals, predictions, save_location):
     plt.title('Precision-Recall Curve')
     plt.savefig(save_location + 'PR_curve.png')
     
-    AUC_PR = np.trapz(precision, recall)
+    AUC_PR = np.trapezoid(precision, recall)
     return AUC_PR
     
 
@@ -306,7 +307,12 @@ def get_best_threshold(actuals, predictions):
     
 def evaluate_model(model, test_loader, save_location, val_threshold):
     actuals, predictions = get_test_results(model, test_loader)
-    
+
+    if len(actuals) == 0:
+        print(f"WARNING: no samples to evaluate for '{save_location}' "
+              f"(the set is empty, likely due to a small --sample_limit); skipping evaluation.")
+        return
+
     best_threshold, best_f1 = get_best_threshold(actuals, predictions)
     
     AUC_ROC = get_ROC_curve(actuals, predictions, save_location)
@@ -400,24 +406,38 @@ def process_data(df, emb_dir, emb_layer, max_len=1024):
     embeddings_tensors = []
     embeddings_labels = []
     for file in files:
-        tensor = torch.load(file)
+        tensor = torch.load(file, weights_only=False)
         label = file.split("/")[-1].split("|")[1]
         embeddings_tensors.append(tensor)
         embeddings_labels.append(label)
 
+    # The contrastive representations are generated for every sequence in the ESM
+    # embeddings directory, but the metadata may only cover a subset (e.g. when a
+    # small --sample_limit is used during pair mining). Skip any embedding that has
+    # no matching metadata entry so tensors/labels/active sites stay aligned.
     paired_active_sites = []
     paired_labels = []
-    for label in embeddings_labels:
+    paired_tensors = []
+    skipped_labels = []
+    for tensor, label in zip(embeddings_tensors, embeddings_labels):
+        if label not in dict_df:
+            skipped_labels.append(label)
+            continue
         paired_active_sites.append(dict_df[label]["residues"])
         paired_labels.append(label)
-    
+        paired_tensors.append(tensor)
+
+    if skipped_labels:
+        print(f"Skipped {len(skipped_labels)} embedding(s) without a matching metadata entry "
+              f"(e.g. {skipped_labels[:5]})")
+
     # Reorder the metadata df to match the order of the embeddings paired_labels
     # reorder them by the paired_labels
     df_paired = df.set_index("Entry")
     df_paired = df_paired.reindex(paired_labels)
     df_paired = df_paired.reset_index()
-    
-    tensors = embeddings_tensors
+
+    tensors = paired_tensors
     
     # Get a list of all the lengths of the tensors
     lengths = [tensor.shape[0] for tensor in tensors]
@@ -465,8 +485,12 @@ def process_data(df, emb_dir, emb_layer, max_len=1024):
 
 class CustomDataset(Dataset):
     def __init__(self, embeddings, targets):
-        self.embeddings = embeddings
-        self.targets = targets
+        # Detach so the stored tensors are plain leaf tensors with no autograd
+        # graph. DataLoader workers (num_workers > 0) pickle the whole dataset
+        # at spawn time, and torch refuses to serialize non-leaf tensors that
+        # require grad across process boundaries.
+        self.embeddings = embeddings.detach() if torch.is_tensor(embeddings) else embeddings
+        self.targets = targets.detach() if torch.is_tensor(targets) else targets
 
     def __len__(self):
         return len(self.embeddings)
@@ -538,7 +562,7 @@ def test_on_Benchmarks(model, squid_embeddings ,save_location, best_threshold):
     embeddings_tensors = []
     embeddings_labels = []
     for file in files:
-        tensor = torch.load(file, map_location='cpu')
+        tensor = torch.load(file, map_location='cpu', weights_only=False)
         label = file.split("/")[-1].split("|")[1]
         embeddings_tensors.append(tensor)
         embeddings_labels.append(label)
@@ -839,7 +863,7 @@ def main(args):# Create the model instance
         
         print(best_path)
         model = ProteinLSTM(embedding_dim=hyperparams['embedding_dim'], hidden_dim=hyperparams['hidden_dim'], output_dim=hyperparams['output_dim'], num_layers=hyperparams['num_layers'], dropout_rate=hyperparams['dropout_rate'])
-        model.load_state_dict(torch.load(best_path))
+        model.load_state_dict(torch.load(best_path, weights_only=False))
     
     if args.test:
         model = ProteinLSTM(embedding_dim=hyperparams['embedding_dim'], hidden_dim=hyperparams['hidden_dim'], output_dim=hyperparams['output_dim'], num_layers=hyperparams['num_layers'], dropout_rate=hyperparams['dropout_rate'])

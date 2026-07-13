@@ -26,6 +26,7 @@ import argparse
 import torch
 from torch.utils.data import Dataset
 import random
+import re
 from tqdm import tqdm
 import math
 import os
@@ -122,7 +123,7 @@ def get_embeddings(dir,layer=-1):
     count = 0
     files = glob.glob(dir + '/*.pt')
     for file in files:
-        embedding_file = torch.load(file) 
+        embedding_file = torch.load(file, weights_only=False)
         tensor = embedding_file['representations'][layer] # have to get the last layer (48) of the embeddings...
         label = embedding_file['label']
         embeddings_tensors.append(tensor)
@@ -151,7 +152,7 @@ class PointerPairedDataset(Dataset):
 def get_embedding_token(pos, entry, dir, layer=48):
     file = dir + '/sp|' + entry + '|esm' + '.pt'
     with open(file, 'rb') as f:
-        embedding_file = torch.load(f)
+        embedding_file = torch.load(f, weights_only=False)
     return (embedding_file['representations'][layer])[pos,:]
 
 
@@ -161,14 +162,16 @@ def get_AS_pos_from_uniprot(df):
     for index, row in df.iterrows():
         active_site_string = row["Active site"]
         active_site_list = []
-        intermediate_list = active_site_string.split(";")
+        intermediate_list = str(active_site_string).split(";")
         #iterate through the intermediate list and get the active sites
         for item in intermediate_list:
-            if item.startswith("ACT_SITE") or item.startswith(" ACT_SITE"):
-                active_site_list.append(int(item.split("ACT_SITE ")[1])-1)
+            # Accept both "ACT_SITE 105" (UniProt) and "ACT SITE 105" formats.
+            # Positions are 1-based in the annotation, so subtract 1 for 0-based indexing.
+            match = re.search(r"ACT[_ ]SITE\s+(\d+)", item)
+            if match:
+                active_site_list.append(int(match.group(1)) - 1)
         active_sites.append(active_site_list)
     return active_sites
-
 
 # I specifically had the data in the format already ... TODO: change this to be more general or make new function for others to use	
 def get_BS_pos_from_uniprot_processed_tsv(df):
@@ -295,11 +298,18 @@ def scheme_1(df, embeddings_dir, train_entries, non_AS_samplerate = 0.05, EC = F
         sites = unique_entry_df['site'].tolist()
         
         emb_dir = unique_entry_df['embeddings_dir'].iloc[0]
-        embedding = torch.load(emb_dir + '/sp|' + entry + '|esm' + '.pt')
+        embedding = torch.load(emb_dir + '/sp|' + entry + '|esm' + '.pt', weights_only=False)
         embedding = embedding['representations'][layer]
+        max_site = max(sites)
+        if max_site >= embedding.shape[0]:
+            raise IndexError(
+                f"Entry {entry}: site position {max_site} is out of bounds for embedding "
+                f"of length {embedding.shape[0]}. The cached embedding does not match the "
+                f"current sequence - delete the embeddings directory and re-extract."
+            )
         site_embeddings = embedding[sites]
         site_embedding_pool.extend(site_embeddings)
-        
+
         # make a list of the labels for the site embeddings
         sites = [entry+'_'+str(site) for site in sites]
         site_embedding_pool_labels.extend(sites)
@@ -444,11 +454,18 @@ def scheme_2(df, embeddings_dir, train_entries, non_AS_samplerate = 0.02, EC = T
         sites = unique_entry_df['site'].tolist()
         
         emb_dir = unique_entry_df['embeddings_dir'].iloc[0]
-        embedding = torch.load(emb_dir + '/sp|' + entry + '|esm' + '.pt')
+        embedding = torch.load(emb_dir + '/sp|' + entry + '|esm' + '.pt', weights_only=False)
         embedding = embedding['representations'][layer]
+        max_site = max(sites)
+        if max_site >= embedding.shape[0]:
+            raise IndexError(
+                f"Entry {entry}: site position {max_site} is out of bounds for embedding "
+                f"of length {embedding.shape[0]}. The cached embedding does not match the "
+                f"current sequence - delete the embeddings directory and re-extract."
+            )
         site_embeddings = embedding[sites]
         site_embedding_pool.extend(site_embeddings)
-        
+
         # make a list of the labels for the site embeddings
         sites = [entry+'_'+str(site) for site in sites]
         site_embedding_pool_labels.extend(sites)
@@ -603,11 +620,18 @@ def scheme_3(df, embeddings_dir, train_entries, non_AS_samplerate = 0.02, EC = T
         sites = unique_entry_df['site'].tolist()
         
         emb_dir = unique_entry_df['embeddings_dir'].iloc[0]
-        embedding = torch.load(emb_dir + '/sp|' + entry + '|esm' + '.pt')
+        embedding = torch.load(emb_dir + '/sp|' + entry + '|esm' + '.pt', weights_only=False)
         embedding = embedding['representations'][layer]
+        max_site = max(sites)
+        if max_site >= embedding.shape[0]:
+            raise IndexError(
+                f"Entry {entry}: site position {max_site} is out of bounds for embedding "
+                f"of length {embedding.shape[0]}. The cached embedding does not match the "
+                f"current sequence - delete the embeddings directory and re-extract."
+            )
         site_embeddings = embedding[sites]
         site_embedding_pool.extend(site_embeddings)
-        
+
         # make a list of the labels for the site embeddings
         sites = [entry+'_'+str(site) for site in sites]
         site_embedding_pool_labels.extend(sites)

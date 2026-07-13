@@ -88,7 +88,7 @@ def main(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = ContrastiveModel(input_dim, output_dim, dropout_prob).to(device)
     # load the trained model
-    model.load_state_dict(torch.load(args.model_location))
+    model.load_state_dict(torch.load(args.model_location, weights_only=False))
     model.eval()
 
     if torch.cuda.is_available():
@@ -124,7 +124,7 @@ def main(args):
         if exists:
             continue
         
-        seq = torch.load(embedding_file)['representations'][layer]
+        seq = torch.load(embedding_file, weights_only=False)['representations'][layer]
         seq_rep = []
         
         # load all the tokens in the seq into a dataloader for parrallel processing

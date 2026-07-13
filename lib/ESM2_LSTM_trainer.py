@@ -161,7 +161,7 @@ class ProteinLSTM(nn.Module):
 
 def save_best_model(hyperparams, best_model_path, save_location):
     model = ProteinLSTM(embedding_dim=hyperparams['embedding_dim'], hidden_dim=hyperparams['hidden_dim'], output_dim=hyperparams['output_dim'], num_layers=hyperparams['num_layers'], dropout_rate=hyperparams['dropout_rate'])
-    model.load_state_dict(torch.load(best_model_path))
+    model.load_state_dict(torch.load(best_model_path, weights_only=False))
     
     # get best_model_path file name and remove prepath
     best_model_path = best_model_path.split('/')[-1]
@@ -234,7 +234,7 @@ def get_ROC_curve(actuals, predictions, save_location):
     plt.ylabel('True Positive Rate')
     plt.savefig(save_location + 'ROC_curve.png')
     
-    AUC_ROC = np.trapz(tpr, fpr)
+    AUC_ROC = np.trapezoid(tpr, fpr)
     return AUC_ROC
 
 
@@ -247,7 +247,7 @@ def get_PR_curve(actuals, predictions, save_location):
     plt.title('Precision-Recall Curve')
     plt.savefig(save_location + 'PR_curve.png')
     
-    AUC_PR = np.trapz(precision, recall)
+    AUC_PR = np.trapezoid(precision, recall)
     return AUC_PR
     
     
@@ -317,13 +317,13 @@ def main(args):# Create the model instance
     # Load the metadata
     metadata = pd.read_csv(args.metadata, sep='\t')
     print('stugats')
-    embeddings = torch.load(args.embeddings)
+    embeddings = torch.load(args.embeddings, weights_only=False)
     
     # move the embeddings and targets to cpu
     embeddings = embeddings.cpu()
     
     print('stugats amassage')
-    targets = torch.load(args.targets)
+    targets = torch.load(args.targets, weights_only=False)
     targets = targets.cpu()
     
     # put it on the GPU
@@ -523,7 +523,7 @@ def main(args):# Create the model instance
         
         print(best_path)
         model = ProteinLSTM(embedding_dim=hyperparams['embedding_dim'], hidden_dim=hyperparams['hidden_dim'], output_dim=hyperparams['output_dim'], num_layers=hyperparams['num_layers'], dropout_rate=hyperparams['dropout_rate'])
-        model.load_state_dict(torch.load(best_path))
+        model.load_state_dict(torch.load(best_path, weights_only=False))
     
     if args.test:
         model = ProteinLSTM(embedding_dim=hyperparams['embedding_dim'], hidden_dim=hyperparams['hidden_dim'], output_dim=hyperparams['output_dim'], num_layers=hyperparams['num_layers'], dropout_rate=hyperparams['dropout_rate'])
