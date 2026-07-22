@@ -299,17 +299,21 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
                 tmp_df = query_df.iloc[prev_chunk:df_end]
                 df_list.append(tmp_df)
                 prev_chunk = i 
+            # Threshold flags to forward to the ensemble worker. The worker's
+            # argparse defaults match the outer CLI defaults, so passing these
+            # explicitly is a no-op when the user has not overridden them.
+            threshold_args = ['--mean_prob', str(mean_prob), '--mean_var', str(mean_var)]
             for i, df_chunk in tqdm(enumerate(df_list)):
                 chunk_fasta = os.path.join(output_folder, f'{run_name}_{i}_input_fasta.fasta')
                 with open(chunk_fasta, 'w+') as fout:
                     for seq_id, seq in df_chunk[['id', 'seq']].values:  # type: ignore 
                         fout.write(f">{seq_id}\n{seq}\n")
                 if cpu:
-                    cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), chunk_fasta, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder, '--cpu']
+                    cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), chunk_fasta, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder, '--cpu'] + threshold_args
                 elif iterative:
-                    cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), chunk_fasta, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder, '--single_model']
+                    cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), chunk_fasta, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder, '--single_model'] + threshold_args
                 else:
-                    cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), chunk_fasta, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder]
+                    cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), chunk_fasta, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder] + threshold_args
                 u.warn_p(["Running command:", ' '.join(cmd)])
                 run_subprocess(cmd)
                 input_filename = chunk_fasta.split('/')[-1].split('.')[0]
@@ -328,12 +332,15 @@ def run(fasta_file: Annotated[str, typer.Argument(help="Full path to query fasta
             squidly_ensemble['label'] = squidly_ensemble.index
         else:
             fasta_file = os.path.join(output_folder, f'{run_name}_input_fasta.fasta')
+            # Threshold flags to forward to the ensemble worker (see comment
+            # above in the chunked branch).
+            threshold_args = ['--mean_prob', str(mean_prob), '--mean_var', str(mean_var)]
             if cpu:
-                cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), fasta_file, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder, '--cpu']
+                cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), fasta_file, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder, '--cpu'] + threshold_args
             elif iterative:
-                cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), fasta_file, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder, '--single_model']
+                cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), fasta_file, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder, '--single_model'] + threshold_args
             else:
-                cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), fasta_file, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder]
+                cmd = ['python', os.path.join(pckage_dir, 'squidly.py'), fasta_file, esm2_model, os.path.join(model_folder, esm2_model_dir), output_folder] + threshold_args
             u.warn_p(["Running non-chunked command:", ' '.join(cmd)])
             # run using os.system so we can see the output
             run_subprocess(cmd)
